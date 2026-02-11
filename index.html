@@ -108,6 +108,8 @@ html, body {height:100%; margin:0; font-family:'Segoe UI',sans-serif;}
         <div class="legend-color" style="background:green;"></div>Supermercado <span class="count" id="countSuper">0</span></label>
       <label class="legend-item"><input type="checkbox" id="toggleBar" checked>
         <div class="legend-color" style="background:purple;"></div>Bar/Cafetería <span class="count" id="countBar">0</span></label>
+      <label class="legend-item"><input type="checkbox" id="toggleGas" checked>
+        <div class="legend-color" style="background:orange;"></div>Gasolinera <span class="count" id="countGas">0</span></label>
     </div>
   </div>
 </div>
@@ -143,22 +145,30 @@ const iconEstanco=L.icon({iconUrl:'https://raw.githubusercontent.com/pointhi/lea
 const iconTienda=L.icon({iconUrl:'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-gold.png',shadowUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',iconSize:[25,41],iconAnchor:[12,41]});
 const iconSuper=L.icon({iconUrl:'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',shadowUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',iconSize:[25,41],iconAnchor:[12,41]});
 const iconBar=L.icon({iconUrl:'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-violet.png',shadowUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',iconSize:[25,41],iconAnchor:[12,41]});
+const iconGas=L.icon({iconUrl:'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png',shadowUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',iconSize:[25,41],iconAnchor:[12,41]});
 
 // Usuario
 let userLatLng=null;
 const userMarker=L.circleMarker([0,0],{radius:8,color:"#fff",weight:3,fillColor:"#2563eb",fillOpacity:1}).addTo(map);
-map.locate({enableHighAccuracy:true});
+
+// Geolocalización precisa
+map.locate({enableHighAccuracy:true, watch:true, setView:false});
 map.on('locationfound', e=>{ userLatLng=e.latlng; userMarker.setLatLng(userLatLng); });
 
 // Cache y filtros
 const cache=new Map(); let lastKey=null;
-function calcularRadio(){const z=map.getZoom(); if(z>=17)return 800;if(z>=15)return 1500;if(z>=13)return 3000;if(z>=11)return 6000;return 10000;}
-function generarKey(){const c=map.getCenter(); return `${c.lat.toFixed(2)}_${c.lng.toFixed(2)}_${map.getZoom()}`;}
-let filter={estanco:true,tienda:true,super:true,bar:true};
+function calcularRadio(){const z=map.getZoom(); if(z>=17)return 600;if(z>=15)return 1200;if(z>=13)return 2500;if(z>=11)return 5000;return 9000;}
+function generarKey(){const c=map.getCenter(); return `${c.lat.toFixed(3)}_${c.lng.toFixed(3)}_${map.getZoom()}`;}
+let filter={estanco:true,tienda:true,super:true,bar:true,gas:true};
 
 // Contadores
-function actualizarContadores(estanco,tienda,superm,bar){ document.getElementById("countEstanco").textContent=estanco;
-document.getElementById("countTienda").textContent=tienda; document.getElementById("countSuper").textContent=superm; document.getElementById("countBar").textContent=bar; }
+function actualizarContadores(estanco,tienda,superm,bar,gas){ 
+  document.getElementById("countEstanco").textContent=estanco;
+  document.getElementById("countTienda").textContent=tienda; 
+  document.getElementById("countSuper").textContent=superm; 
+  document.getElementById("countBar").textContent=bar; 
+  document.getElementById("countGas").textContent=gas;
+}
 
 // Buscar datos
 async function buscarDatos(){
@@ -172,6 +182,7 @@ async function buscarDatos(){
 node["shop"="tobacco"](around:${r},${c.lat},${c.lng});
 node["shop"~"convenience|variety_store|supermarket"](around:${r},${c.lat},${c.lng});
 node["amenity"="bar"]["vending"="tobacco"](around:${r},${c.lat},${c.lng});
+node["amenity"="fuel"](around:${r},${c.lat},${c.lng});
 );out;`;
 
   try{
@@ -185,13 +196,14 @@ node["amenity"="bar"]["vending"="tobacco"](around:${r},${c.lat},${c.lng});
 
 // Pintar
 function pintar(elements){
-  let countE=0,countT=0,countS=0,countB=0;
+  let countE=0,countT=0,countS=0,countB=0,countG=0;
   elements.forEach(p=>{
     if(!p.lat||!p.lon) return;
     let icon,tipo,visible=false;
     if(p.tags?.shop==="tobacco"){ icon=iconEstanco; tipo="Estanco"; visible=filter.estanco; if(visible) countE++; }
     else if(p.tags?.shop==="supermarket"){ icon=iconSuper; tipo="Supermercado"; visible=filter.super; if(visible) countS++; }
     else if(p.tags?.amenity==="bar" && p.tags?.vending==="tobacco"){ icon=iconBar; tipo="Bar"; visible=filter.bar; if(visible) countB++; }
+    else if(p.tags?.amenity==="fuel"){ icon=iconGas; tipo="Gasolinera"; visible=filter.gas; if(visible) countG++; }
     else{ icon=iconTienda; tipo="Tienda/Bazar"; visible=filter.tienda; if(visible) countT++; }
     if(!visible) return;
 
@@ -202,7 +214,7 @@ function pintar(elements){
 <p>${hora}</p>
 <a href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}" target="_blank">Cómo llegar</a>`);
   });
-  actualizarContadores(countE,countT,countS,countB);
+  actualizarContadores(countE,countT,countS,countB,countG);
 }
 
 // Buscar manual
@@ -239,6 +251,7 @@ document.getElementById("toggleEstanco").onchange=e=>{ filter.estanco=e.target.c
 document.getElementById("toggleTienda").onchange=e=>{ filter.tienda=e.target.checked; buscarDatos(); };
 document.getElementById("toggleSuper").onchange=e=>{ filter.super=e.target.checked; buscarDatos(); };
 document.getElementById("toggleBar").onchange=e=>{ filter.bar=e.target.checked; buscarDatos(); };
+document.getElementById("toggleGas").onchange=e=>{ filter.gas=e.target.checked; buscarDatos(); };
 
 // Guardar coordenada
 document.getElementById('addButton').onclick=()=>{
