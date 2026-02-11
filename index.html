@@ -3,43 +3,55 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Vaper Tracker Lite</title>
+<title>Buscador de Estancos</title>
 
-<link rel="manifest" href="manifest.json">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 
 <style>
-html,body{height:100%;margin:0;font-family:sans-serif;}
-#map{height:100%;width:100%;}
-.topbar{
+html,body{
+margin:0;
+height:100%;
+font-family:Arial, sans-serif;
+}
+
+#map{
+height:100%;
+width:100%;
+}
+
+.panel{
 position:absolute;
 top:10px;
 left:50%;
 transform:translateX(-50%);
 z-index:1000;
 background:white;
-padding:8px;
-border-radius:12px;
-box-shadow:0 3px 10px rgba(0,0,0,0.2);
+padding:10px;
+border-radius:14px;
+box-shadow:0 4px 15px rgba(0,0,0,0.2);
 display:flex;
-gap:5px;
+gap:6px;
 }
+
 input{
 padding:8px;
 border-radius:8px;
 border:1px solid #ccc;
 }
+
 button{
 padding:8px 10px;
 border:none;
 border-radius:8px;
 background:#2563eb;
 color:white;
+font-weight:bold;
 cursor:pointer;
 }
+
 .status{
 position:absolute;
-bottom:20px;
+bottom:15px;
 left:50%;
 transform:translateX(-50%);
 background:white;
@@ -52,10 +64,10 @@ box-shadow:0 3px 10px rgba(0,0,0,0.2);
 </head>
 <body>
 
-<div class="topbar">
+<div class="panel">
 <input type="text" id="city" placeholder="Ciudad...">
 <button onclick="buscarCiudad()">Ir</button>
-<button onclick="buscarEstancos()">Buscar estancos</button>
+<button onclick="buscarEstancos()">Buscar</button>
 </div>
 
 <div id="map"></div>
@@ -65,11 +77,7 @@ box-shadow:0 3px 10px rgba(0,0,0,0.2);
 
 <script>
 
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("sw.js");
-}
-
-const map=L.map('map').setView([40.41,-3.70],6);
+const map = L.map('map').setView([40.4168,-3.7038],6);
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
 attribution:'© OpenStreetMap'
@@ -77,7 +85,7 @@ attribution:'© OpenStreetMap'
 
 let markers=[];
 
-function setStatus(text){
+function estado(text){
 document.getElementById("status").innerText=text;
 }
 
@@ -86,70 +94,63 @@ markers.forEach(m=>map.removeLayer(m));
 markers=[];
 }
 
-function icon(color){
-return L.icon({
-iconUrl:`https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
-shadowUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-iconSize:[25,41],iconAnchor:[12,41]
-});
+async function buscarCiudad(){
+const ciudad=document.getElementById("city").value;
+if(!ciudad)return;
+
+estado("Buscando ciudad...");
+
+const res=await fetch("https://nominatim.openstreetmap.org/search?format=json&q="+encodeURIComponent(ciudad));
+const data=await res.json();
+
+if(data.length){
+map.flyTo([data[0].lat,data[0].lon],14);
+estado("Ciudad encontrada");
+}else{
+estado("No encontrada");
+}
 }
 
 async function buscarEstancos(){
 
-setStatus("Buscando...");
 limpiar();
+estado("Buscando...");
 
-const c=map.getCenter();
-const r=3000; // radio más pequeño para velocidad
+const centro=map.getCenter();
+const radio=2000;
 
-const query=`[out:json][timeout:15];
-(node["shop"="tobacco"](around:${r},${c.lat},${c.lng}););
+const query=`[out:json][timeout:20];
+node["shop"="tobacco"](around:${radio},${centro.lat},${centro.lng});
 out;`;
 
 try{
-const resp=await fetch("https://overpass-api.de/api/interpreter",{
+const res=await fetch("https://overpass-api.de/api/interpreter",{
 method:"POST",
 body:query
 });
 
-const data=await resp.json();
+const data=await res.json();
 
 if(!data.elements.length){
-setStatus("No se encontraron estancos aquí");
+estado("No se encontraron estancos aquí");
 return;
 }
 
 data.elements.forEach(p=>{
-const marker=L.marker([p.lat,p.lon],{icon:icon("red")}).addTo(map);
+const marker=L.marker([p.lat,p.lon]).addTo(map);
 marker.bindPopup(`
 <b>${p.tags?.name||"Estanco"}</b><br><br>
-<a href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}" target="_blank">Cómo llegar</a>
+<a href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}" target="_blank">
+Cómo llegar
+</a>
 `);
 markers.push(marker);
 });
 
-setStatus(data.elements.length+" encontrados");
+estado(data.elements.length+" encontrados");
 
 }catch(e){
-setStatus("Servidor ocupado, prueba otra zona");
-}
-
-}
-
-async function buscarCiudad(){
-const val=document.getElementById("city").value;
-if(!val)return;
-
-setStatus("Buscando ciudad...");
-
-const resp=await fetch('https://nominatim.openstreetmap.org/search?format=json&q='+encodeURIComponent(val));
-const data=await resp.json();
-
-if(data.length){
-map.flyTo([data[0].lat,data[0].lon],15);
-setStatus("Ciudad encontrada");
-}else{
-setStatus("Ciudad no encontrada");
+estado("Servidor lento, prueba otra zona");
 }
 }
 
