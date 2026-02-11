@@ -3,121 +3,90 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mapa de Venta Total: Estancos, Bazares y Kioscos</title>
+    <title>Vaper Tracker: Estancos y Bazares Chinos</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700&display=swap" rel="stylesheet">
 
     <style>
-        :root { --accent: #2563eb; --dark: #0f172a; }
-        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Outfit', sans-serif; background: #f8fafc; }
+        :root { --accent: #2563eb; --bazar: #facc15; }
+        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Outfit', sans-serif; }
         #map { height: 100vh; width: 100%; }
 
-        /* Cabecera flotante */
         .info-header {
             position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
-            z-index: 2000; background: white; padding: 12px 24px; border-radius: 50px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.15); font-weight: 700; font-size: 12px;
-            text-align: center; border: 2px solid var(--accent); width: 85%; max-width: 400px;
+            z-index: 2000; background: #1e293b; color: white; padding: 12px 24px; 
+            border-radius: 50px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); 
+            font-weight: 700; font-size: 11px; text-align: center; border: 1px solid var(--bazar);
         }
 
-        .leaflet-popup-content-wrapper { border-radius: 16px; padding: 10px; border: none; }
-        .popup-card { text-align: center; min-width: 190px; }
-        .popup-card h3 { margin: 5px 0; font-size: 16px; color: var(--dark); font-weight: 700; }
-        .type-badge { font-size: 9px; font-weight: 800; padding: 4px 10px; border-radius: 6px; text-transform: uppercase; margin-bottom: 8px; display: inline-block; }
+        .leaflet-popup-content-wrapper { border-radius: 16px; padding: 8px; }
+        .popup-card { text-align: center; min-width: 170px; }
+        .type-badge { font-size: 9px; font-weight: 800; padding: 4px 8px; border-radius: 5px; text-transform: uppercase; margin-bottom: 5px; display: inline-block; }
         
-        /* Gama de colores por tipo */
-        .badge-estanco { background: #fee2e2; color: #991b1b; } /* Rojo */
-        .badge-bar { background: #e0f2fe; color: #075985; }    /* Azul */
-        .badge-gas { background: #ffedd5; color: #9a3412; }    /* Naranja */
-        .badge-bazar { background: #dcfce7; color: #166534; }  /* Verde */
-        .badge-kiosco { background: #f3e8ff; color: #6b21a8; } /* Púrpura */
+        .badge-estanco { background: #fee2e2; color: #991b1b; } 
+        .badge-bazar { background: #fef9c3; color: #854d0e; border: 1px solid #facc15; }  
+        .badge-gas { background: #ffedd5; color: #9a3412; }
 
-        .btn-google-direct {
-            display: inline-block; width: 100%; background: #4285F4; color: white;
-            text-decoration: none; padding: 12px 0; border-radius: 12px;
-            font-weight: 700; margin-top: 10px; font-size: 12px; transition: 0.2s;
-        }
-        .btn-google-direct:active { transform: scale(0.96); }
-
-        .btn-gps {
-            position: absolute; bottom: 30px; right: 20px; z-index: 2000;
-            background: white; border: none; width: 60px; height: 60px;
-            border-radius: 50%; font-size: 24px; cursor: pointer;
-            box-shadow: 0 8px 25px rgba(0,0,0,0.2); color: var(--accent);
+        .btn-google {
+            display: block; background: #4285F4; color: white; text-decoration: none; 
+            padding: 10px; border-radius: 10px; font-weight: 700; margin-top: 10px; font-size: 12px;
         }
     </style>
 </head>
 <body>
 
-    <div class="info-header">🚀 RED DE VENTA: ESTANCOS, BAZARES Y KIOSCOS</div>
-    <button class="btn-gps" onclick="map.locate({setView: true, maxZoom: 16})">🎯</button>
+    <div class="info-header">⭐ ESPECIAL VAPERS: ESTANCOS Y BAZARES CHINOS</div>
     <div id="map"></div>
 
     <script>
-        var map = L.map('map', { zoomControl: false }).setView([36.72, -4.42], 13);
+        var map = L.map('map', { zoomControl: false }).setView([40.41, -3.70], 6);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png').addTo(map);
 
-        // Definición de iconos por colores
-        const iconUrl = (color) => `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`;
-        const createIcon = (color) => L.icon({ iconUrl: iconUrl(color), shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] });
+        const createIcon = (color) => L.icon({ 
+            iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
+            iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34] 
+        });
 
-        const icons = {
-            red: createIcon('red'),
-            orange: createIcon('orange'),
-            blue: createIcon('blue'),
-            green: createIcon('green'),
-            violet: createIcon('violet')
-        };
+        const icons = { red: createIcon('red'), gold: createIcon('gold'), orange: createIcon('orange') };
 
         map.locate({setView: true, maxZoom: 15});
-        map.on('locationfound', function(e) { buscar(e.latlng.lat, e.latlng.lng); });
-
-        function buscar(lat, lng) {
-            const radio = 4000; 
-            // QUERY MASTER: Estancos, Gasolineras, Bares, Bazares y KIOSCOS
+        map.on('locationfound', function(e) {
+            const radio = 3000;
+            // BUSCAMOS: Estancos (tobacco) y Bazares (variety_store, convenience, supermarket)
             const query = `[out:json];(
-                node["shop"="tobacco"](around:${radio},${lat},${lng});
-                node["amenity"="fuel"](around:${radio},${lat},${lng});
-                node["vending"="tobacco"](around:${radio},${lat},${lng});
-                node["shop"="convenience"](around:${radio},${lat},${lng});
-                node["shop"="kiosk"](around:${radio},${lat},${lng});
-                node["shop"="news"](around:${radio},${lat},${lng});
+                node["shop"="tobacco"](around:${radio},${e.latlng.lat},${e.latlng.lng});
+                node["shop"="variety_store"](around:${radio},${e.latlng.lat},${e.latlng.lng});
+                node["shop"="convenience"](around:${radio},${e.latlng.lat},${e.latlng.lng});
+                node["shop"="supermarket"](around:${radio},${e.latlng.lat},${e.latlng.lng});
+                node["amenity"="fuel"](around:${radio},${e.latlng.lat},${e.latlng.lng});
             );out;`;
-            
+
             fetch("https://overpass-api.de/api/interpreter?data=" + encodeURIComponent(query))
             .then(r => r.json()).then(d => {
                 d.elements.forEach(p => {
-                    let tipo = "Local", icono = icons.green, clase = "badge-bazar";
+                    let tipo = "Bazar Chino", icono = icons.gold, clase = "badge-bazar";
 
                     if(p.tags.shop === "tobacco") {
                         tipo = "Estanco Oficial"; icono = icons.red; clase = "badge-estanco";
                     } else if(p.tags.amenity === "fuel") {
                         tipo = "Gasolinera"; icono = icons.orange; clase = "badge-gas";
-                    } else if(p.tags.vending === "tobacco") {
-                        tipo = "Bar con Máquina"; icono = icons.blue; clase = "badge-bar";
-                    } else if(p.tags.shop === "kiosk" || p.tags.shop === "news") {
-                        tipo = "Kiosco / Prensa"; icono = icons.violet; clase = "badge-kiosco";
-                    } else {
-                        tipo = "Bazar / Alimentación"; icono = icons.green; clase = "badge-bazar";
                     }
 
-                    var nombre = p.tags.name || tipo;
-                    var searchUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(nombre)}+${p.lat},${p.lon}`;
+                    var searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(p.tags.name || tipo)}+${p.lat},${p.lon}`;
 
-                    var html = `
+                    L.marker([p.lat, p.lon], {icon: icono}).addTo(map).bindPopup(`
                         <div class="popup-card">
                             <span class="type-badge ${clase}">${tipo}</span>
-                            <h3>${nombre}</h3>
-                            <p style="font-size:11px; color:#64748b; margin: 0 0 10px 0;">💨 Disponibilidad habitual de vapers</p>
-                            <a href="${searchUrl}" target="_blank" class="btn-google-direct">🕒 VER HORARIO Y RUTA</a>
+                            <h3 style="margin:5px 0; font-size:15px;">${p.tags.name || "Bazar Alimentación"}</h3>
+                            <p style="font-size:11px; color:#666;">💨 Venta de Vapers 24h/Extendido</p>
+                            <a href="${searchUrl}" target="_blank" class="btn-google">VER HORARIO EN GOOGLE</a>
                         </div>
-                    `;
-                    L.marker([p.lat, p.lon], {icon: icono}).addTo(map).bindPopup(html);
+                    `);
                 });
             });
-        }
+        });
     </script>
 </body>
 </html>
