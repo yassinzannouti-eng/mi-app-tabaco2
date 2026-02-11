@@ -3,36 +3,65 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Vaper Tracker</title>
+<title>Vaper Tracker Lite</title>
 
 <link rel="manifest" href="manifest.json">
-
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
 
 <style>
 html,body{height:100%;margin:0;font-family:sans-serif;}
 #map{height:100%;width:100%;}
-.search{position:absolute;top:15px;left:50%;transform:translateX(-50%);
-z-index:1000;width:90%;max-width:400px;display:flex;}
-.search input{flex:1;padding:10px;border:none;border-radius:20px 0 0 20px;}
-.search button{padding:10px;border:none;background:#2563eb;color:white;border-radius:0 20px 20px 0;}
-.badge{padding:4px 8px;border-radius:10px;font-size:12px;}
-.open{background:#22c55e;color:white;}
-.closed{background:#ef4444;color:white;}
+.topbar{
+position:absolute;
+top:10px;
+left:50%;
+transform:translateX(-50%);
+z-index:1000;
+background:white;
+padding:8px;
+border-radius:12px;
+box-shadow:0 3px 10px rgba(0,0,0,0.2);
+display:flex;
+gap:5px;
+}
+input{
+padding:8px;
+border-radius:8px;
+border:1px solid #ccc;
+}
+button{
+padding:8px 10px;
+border:none;
+border-radius:8px;
+background:#2563eb;
+color:white;
+cursor:pointer;
+}
+.status{
+position:absolute;
+bottom:20px;
+left:50%;
+transform:translateX(-50%);
+background:white;
+padding:6px 12px;
+border-radius:10px;
+font-size:13px;
+box-shadow:0 3px 10px rgba(0,0,0,0.2);
+}
 </style>
 </head>
 <body>
 
-<div class="search">
-<input type="text" id="city" placeholder="Buscar ciudad...">
-<button onclick="buscarCiudad()">🔍</button>
+<div class="topbar">
+<input type="text" id="city" placeholder="Ciudad...">
+<button onclick="buscarCiudad()">Ir</button>
+<button onclick="buscarEstancos()">Buscar estancos</button>
 </div>
 
 <div id="map"></div>
+<div class="status" id="status">Listo</div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 
 <script>
 
@@ -42,16 +71,20 @@ if ("serviceWorker" in navigator) {
 
 const map=L.map('map').setView([40.41,-3.70],6);
 
-L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{
-attribution:'©OpenStreetMap'
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+attribution:'© OpenStreetMap'
 }).addTo(map);
 
-let userLocation=null;
-map.locate({enableHighAccuracy:true});
-map.on('locationfound',e=>{userLocation=e.latlng;});
+let markers=[];
 
-const cluster=L.markerClusterGroup();
-map.addLayer(cluster);
+function setStatus(text){
+document.getElementById("status").innerText=text;
+}
+
+function limpiar(){
+markers.forEach(m=>map.removeLayer(m));
+markers=[];
+}
 
 function icon(color){
 return L.icon({
@@ -61,63 +94,64 @@ iconSize:[25,41],iconAnchor:[12,41]
 });
 }
 
-function estaAbierto(opening){
-if(!opening)return null;
-const now=new Date();
-const min=now.getHours()*60+now.getMinutes();
-const match=opening.match(/(\d{2}:\d{2})-(\d{2}:\d{2})/);
-if(!match)return null;
-const i=match[1].split(":");
-const f=match[2].split(":");
-const mi=parseInt(i[0])*60+parseInt(i[1]);
-const mf=parseInt(f[0])*60+parseInt(f[1]);
-return min>=mi&&min<=mf;
-}
+async function buscarEstancos(){
 
-async function buscar(){
-cluster.clearLayers();
+setStatus("Buscando...");
+limpiar();
+
 const c=map.getCenter();
-const r=6000;
+const r=3000; // radio más pequeño para velocidad
 
-const query=`[out:json];
-(node["shop"="tobacco"](around:${r},${c.lat},${c.lng}););out;`;
+const query=`[out:json][timeout:15];
+(node["shop"="tobacco"](around:${r},${c.lat},${c.lng}););
+out;`;
 
-const resp=await fetch("https://overpass-api.de/api/interpreter",{method:"POST",body:query});
+try{
+const resp=await fetch("https://overpass-api.de/api/interpreter",{
+method:"POST",
+body:query
+});
+
 const data=await resp.json();
 
-data.elements.forEach(p=>{
-const abierto=estaAbierto(p.tags?.opening_hours);
-let badge="";
-let icono=icon("red");
-
-if(abierto===true){
-badge='<span class="badge open">Abierto</span>';
-}else if(abierto===false){
-badge='<span class="badge closed">Cerrado</span>';
-icono=icon("grey");
+if(!data.elements.length){
+setStatus("No se encontraron estancos aquí");
+return;
 }
 
-const marker=L.marker([p.lat,p.lon],{icon:icono});
-
+data.elements.forEach(p=>{
+const marker=L.marker([p.lat,p.lon],{icon:icon("red")}).addTo(map);
 marker.bindPopup(`
-<b>${p.tags?.name||"Estanco"}</b><br>
-${badge}<br><br>
+<b>${p.tags?.name||"Estanco"}</b><br><br>
 <a href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}" target="_blank">Cómo llegar</a>
 `);
-
-cluster.addLayer(marker);
+markers.push(marker);
 });
+
+setStatus(data.elements.length+" encontrados");
+
+}catch(e){
+setStatus("Servidor ocupado, prueba otra zona");
+}
+
 }
 
 async function buscarCiudad(){
 const val=document.getElementById("city").value;
+if(!val)return;
+
+setStatus("Buscando ciudad...");
+
 const resp=await fetch('https://nominatim.openstreetmap.org/search?format=json&q='+encodeURIComponent(val));
 const data=await resp.json();
-if(data.length)map.flyTo([data[0].lat,data[0].lon],14);
-}
 
-map.on("moveend",buscar);
-setTimeout(buscar,1500);
+if(data.length){
+map.flyTo([data[0].lat,data[0].lon],15);
+setStatus("Ciudad encontrada");
+}else{
+setStatus("Ciudad no encontrada");
+}
+}
 
 </script>
 
