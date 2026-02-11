@@ -3,167 +3,61 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>App de Estancos, Gasolineras y Vapers</title>
-
+    <title>Mapa de Estancos y Vapers</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; }
+        body, html { margin: 0; padding: 0; height: 100%; font-family: sans-serif; }
         #map { height: 100vh; width: 100%; z-index: 1; }
-
-        /* Interfaz Flotante */
-        .ui-container {
-            position: absolute;
-            top: 15px;
-            right: 15px;
-            z-index: 1000;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .btn-ui {
-            background: #ffffff;
-            border: none;
-            padding: 12px 18px;
-            cursor: pointer;
-            border-radius: 8px;
-            font-weight: bold;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
-            transition: all 0.3s ease;
-        }
-
-        .btn-ui:hover { transform: translateY(-2px); background: #f8f9fa; }
-        .btn-gps { background: #007bff; color: white; }
-
-        /* Menú Lateral (Sidebar) */
         #sidebar {
-            position: absolute;
-            left: -320px;
-            top: 0;
-            width: 300px;
-            height: 100%;
-            background: rgba(255, 255, 255, 0.95);
-            z-index: 1100;
-            box-shadow: 2px 0 10px rgba(0,0,0,0.2);
-            transition: 0.3s;
-            padding: 20px;
-            overflow-y: auto;
+            position: absolute; left: -320px; top: 0; width: 300px; height: 100%;
+            background: white; z-index: 1100; transition: 0.3s; padding: 20px;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.2); overflow-y: auto;
         }
-
         #sidebar.active { left: 0; }
-
-        .toggle-sidebar {
-            position: absolute;
-            left: 10px;
-            top: 15px;
-            z-index: 1200;
-        }
-
-        .vaper-badge {
-            background: #e0f7fa;
-            color: #00838f;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 0.8em;
-            font-weight: bold;
-        }
-
-        .lista-coords {
-            list-style: none;
-            padding: 0;
-            margin-top: 20px;
-        }
-
-        .lista-coords li {
-            background: #f1f3f5;
-            padding: 8px;
-            margin-bottom: 5px;
-            border-radius: 4px;
-            font-size: 0.85em;
-            border-left: 4px solid #007bff;
-        }
+        .ui-btns { position: absolute; top: 10px; right: 10px; z-index: 1000; }
+        .btn { background: white; border: 1px solid #ccc; padding: 10px; cursor: pointer; border-radius: 5px; font-weight: bold; }
+        .btn-menu { position: absolute; left: 10px; top: 10px; z-index: 1200; }
+        .vaper { color: #00838f; font-weight: bold; font-size: 11px; background: #e0f7fa; padding: 2px; }
     </style>
 </head>
 <body>
-
-    <button class="btn-ui toggle-sidebar" onclick="document.getElementById('sidebar').classList.toggle('active')">☰ Lista</button>
-
+    <button class="btn btn-menu" onclick="document.getElementById('sidebar').classList.toggle('active')">☰ LISTA</button>
     <div id="sidebar">
-        <h3>📍 Puntos Capturados</h3>
-        <p><small>Haz clic en el mapa para añadir coordenadas aquí.</small></p>
-        <ul id="listaCoords" class="lista-coords"></ul>
-        <button class="btn-ui" style="width:100%; margin-top:10px;" onclick="limpiarLista()">Borrar Lista</button>
+        <h3>Puntos Guardados</h3>
+        <ul id="lista"></ul>
+        <button onclick="window.location.reload()" class="btn">Limpiar Todo</button>
     </div>
-
-    <div class="ui-container">
-        <button class="btn-ui btn-gps" onclick="centrarGPS()">📍 Mi ubicación</button>
-    </div>
-
+    <div class="ui-btns"><button class="btn" onclick="map.locate({setView:true})">📍 RECENTRAR</button></div>
     <div id="map"></div>
-
     <script>
-        var map = L.map('map').setView([40.41, -3.70], 6);
-        var listaUl = document.getElementById('listaCoords');
-
+        var map = L.map('map').setView([40.4, -3.7], 6);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-
-        var estancoIcon = L.icon({
-            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-            iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]
-        });
         
-        var gasolineraIcon = L.icon({
-            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png',
-            iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]
-        });
+        var iconE = L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png', iconSize: [25, 41] });
+        var iconG = L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-orange.png', iconSize: [25, 41] });
 
         map.locate({setView: true, maxZoom: 15});
+        map.on('locationfound', function(e) { buscar(e.latlng.lat, e.latlng.lng); });
 
-        map.on('locationfound', function(e) {
-            L.marker(e.latlng).addTo(map).bindPopup("<b>Estás aquí</b>").openPopup();
-            buscarPuntos(e.latlng.lat, e.latlng.lng);
-        });
-
-        function centrarGPS() {
-            map.locate({setView: true, maxZoom: 15});
-        }
-
-        // Clic en mapa para añadir a la lista de "Faltantes"
         map.on('click', function(e) {
-            var lat = e.latlng.lat.toFixed(6);
-            var lng = e.latlng.lng.toFixed(6);
-            var li = document.createElement('li');
-            li.innerHTML = `Lat: ${lat}<br>Lng: ${lng}`;
-            listaUl.appendChild(li);
-            
-            // Abrir el menú para que el usuario vea que se ha añadido
+            var res = e.latlng.lat.toFixed(6) + "," + e.latlng.lng.toFixed(6);
+            var node = document.createElement("LI");
+            node.innerHTML = "Coords: " + res;
+            document.getElementById("lista").appendChild(node);
             document.getElementById('sidebar').classList.add('active');
         });
 
-        function limpiarLista() { listaUl.innerHTML = ""; }
-
-        function buscarPuntos(lat, lng) {
-            const radio = 7000;
-            const query = `[out:json];(node["shop"="tobacco"](around:${radio},${lat},${lng});node["amenity"="fuel"](around:${radio},${lat},${lng}););out;`;
-            const url = "https://overpass-api.de/api/interpreter?data=" + encodeURIComponent(query);
-
-            fetch(url)
-                .then(res => res.json())
-                .then(data => {
-                    data.elements.forEach(punto => {
-                        var esFuel = punto.tags.amenity === "fuel";
-                        var nombre = punto.tags.name || (esFuel ? "Gasolinera" : "Estanco");
-                        
-                        // Mensaje de Vapers
-                        var infoVaper = "<br><span class='vaper-badge'>💨 Venta de Vapers disponible</span>";
-
-                        L.marker([punto.lat, punto.lon], {icon: esFuel ? gasolineraIcon : estancoIcon})
-                            .addTo(map)
-                            .bindPopup(`<b>${nombre}</b>${infoVaper}<br><small>Punto verificado</small>`);
-                    });
+        function buscar(lat, lng) {
+            const q = `[out:json];(node["shop"="tobacco"](around:7000,${lat},${lng});node["amenity"="fuel"](around:7000,${lat},${lng}););out;`;
+            fetch("https://overpass-api.de/api/interpreter?data=" + encodeURIComponent(q))
+            .then(r => r.json()).then(d => {
+                d.elements.forEach(p => {
+                    var isG = p.tags.amenity === "fuel";
+                    L.marker([p.lat, p.lon], {icon: isG ? iconG : iconE}).addTo(map)
+                    .bindPopup(`<b>${p.tags.name || (isG?'Gasolinera':'Estanco')}</b><br><span class="vaper">💨 Vende Vapers</span>`);
                 });
+            });
         }
     </script>
 </body>
