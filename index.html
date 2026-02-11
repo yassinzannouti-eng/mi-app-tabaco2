@@ -3,41 +3,65 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vaper Tracker: Estancos y Bazares Chinos</title>
+    <title>Vaper Tracker Pro: Captura y Búsqueda</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700&display=swap" rel="stylesheet">
 
     <style>
-        :root { --accent: #2563eb; --bazar: #facc15; }
-        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Outfit', sans-serif; }
-        #map { height: 100vh; width: 100%; }
+        :root { --accent: #2563eb; --bazar: #facc15; --dark: #1e293b; }
+        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Outfit', sans-serif; overflow: hidden; }
+        #map { height: 100vh; width: 100%; z-index: 1; }
 
-        .info-header {
+        /* BUSCADOR SUPERIOR */
+        .search-container {
             position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
-            z-index: 2000; background: #1e293b; color: white; padding: 12px 24px; 
-            border-radius: 50px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); 
-            font-weight: 700; font-size: 11px; text-align: center; border: 1px solid var(--bazar);
+            z-index: 2000; width: 90%; max-width: 400px; display: flex; gap: 5px;
         }
+        #search-input {
+            flex-grow: 1; padding: 12px 20px; border-radius: 25px; border: 2px solid var(--accent);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); font-family: inherit; outline: none;
+        }
+        .btn-search { background: var(--accent); color: white; border: none; padding: 0 15px; border-radius: 25px; cursor: pointer; }
 
-        .leaflet-popup-content-wrapper { border-radius: 16px; padding: 8px; }
-        .popup-card { text-align: center; min-width: 170px; }
-        .type-badge { font-size: 9px; font-weight: 800; padding: 4px 8px; border-radius: 5px; text-transform: uppercase; margin-bottom: 5px; display: inline-block; }
+        /* SIDEBAR DE CAPTURA */
+        #sidebar {
+            position: absolute; left: -320px; top: 0; width: 300px; height: 100%;
+            background: white; z-index: 3000; transition: 0.4s; padding: 25px;
+            box-shadow: 5px 0 20px rgba(0,0,0,0.2); overflow-y: auto;
+        }
+        #sidebar.active { left: 0; }
+        .btn-toggle { position: absolute; left: 10px; top: 80px; z-index: 2500; background: var(--dark); color: white; border: none; padding: 10px; border-radius: 5px; cursor: pointer; }
+
+        .captured-item { background: #f1f5f9; padding: 10px; border-radius: 8px; margin-bottom: 8px; font-size: 12px; border-left: 4px solid var(--accent); }
         
+        /* POPUPS */
+        .type-badge { font-size: 9px; font-weight: 800; padding: 4px 8px; border-radius: 6px; text-transform: uppercase; margin-bottom: 5px; display: inline-block; }
         .badge-estanco { background: #fee2e2; color: #991b1b; } 
         .badge-bazar { background: #fef9c3; color: #854d0e; border: 1px solid #facc15; }  
-        .badge-gas { background: #ffedd5; color: #9a3412; }
 
-        .btn-google {
-            display: block; background: #4285F4; color: white; text-decoration: none; 
-            padding: 10px; border-radius: 10px; font-weight: 700; margin-top: 10px; font-size: 12px;
-        }
+        .btn-google { display: block; background: #4285F4; color: white; text-decoration: none; padding: 10px; border-radius: 10px; text-align: center; font-weight: 700; margin-top: 10px; font-size: 12px; }
+        .btn-gps { position: absolute; bottom: 30px; right: 20px; z-index: 2000; background: white; border: none; width: 55px; height: 55px; border-radius: 50%; font-size: 22px; cursor: pointer; box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
     </style>
 </head>
 <body>
 
-    <div class="info-header">⭐ ESPECIAL VAPERS: ESTANCOS Y BAZARES CHINOS</div>
+    <div class="search-container">
+        <input type="text" id="search-input" placeholder="Buscar ciudad o calle...">
+        <button class="btn-search" onclick="buscarLugar()">🔍</button>
+    </div>
+
+    <button class="btn-toggle" onclick="document.getElementById('sidebar').classList.toggle('active')">📋 LISTA</button>
+
+    <div id="sidebar">
+        <h2 style="margin-top:0;">Captura BOE</h2>
+        <p style="font-size: 13px; color: #666;">Toca el mapa para añadir un punto de venta que no aparezca.</p>
+        <div id="lista-capturas"></div>
+        <button onclick="copiarLista()" style="width:100%; padding:10px; background:var(--dark); color:white; border:none; border-radius:8px; margin-top:10px; cursor:pointer;">Copiar Todo</button>
+    </div>
+
+    <button class="btn-gps" onclick="map.locate({setView: true, maxZoom: 16})">🎯</button>
     <div id="map"></div>
 
     <script>
@@ -52,41 +76,59 @@
         const icons = { red: createIcon('red'), gold: createIcon('gold'), orange: createIcon('orange') };
 
         map.locate({setView: true, maxZoom: 15});
-        map.on('locationfound', function(e) {
-            const radio = 3000;
-            // BUSCAMOS: Estancos (tobacco) y Bazares (variety_store, convenience, supermarket)
-            const query = `[out:json];(
-                node["shop"="tobacco"](around:${radio},${e.latlng.lat},${e.latlng.lng});
-                node["shop"="variety_store"](around:${radio},${e.latlng.lat},${e.latlng.lng});
-                node["shop"="convenience"](around:${radio},${e.latlng.lat},${e.latlng.lng});
-                node["shop"="supermarket"](around:${radio},${e.latlng.lat},${e.latlng.lng});
-                node["amenity"="fuel"](around:${radio},${e.latlng.lat},${e.latlng.lng});
-            );out;`;
+        map.on('locationfound', function(e) { cargarPuntos(e.latlng.lat, e.latlng.lng); });
 
+        // FUNCIÓN CAPTURAR AL CLICAR
+        map.on('click', function(e) {
+            const lat = e.latlng.lat.toFixed(6);
+            const lng = e.latlng.lng.toFixed(6);
+            const div = document.createElement("div");
+            div.className = "captured-item";
+            div.innerHTML = `<b>Nuevo Punto:</b><br>${lat}, ${lng}`;
+            document.getElementById("lista-capturas").prepend(div);
+            document.getElementById('sidebar').classList.add('active');
+        });
+
+        // BUSCADOR DE DIRECCIONES
+        function buscarLugar() {
+            const query = document.getElementById('search-input').value;
+            fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}`)
+            .then(r => r.json()).then(data => {
+                if(data.length > 0) {
+                    const loc = data[0];
+                    map.setView([loc.lat, loc.lon], 16);
+                    cargarPuntos(loc.lat, loc.lon);
+                }
+            });
+        }
+
+        function cargarPuntos(lat, lng) {
+            const query = `[out:json];(node["shop"="tobacco"](around:3000,${lat},${lng});node["shop"~"variety_store|convenience|supermarket"](around:3000,${lat},${lng});node["amenity"="fuel"](around:3000,${lat},${lng}););out;`;
             fetch("https://overpass-api.de/api/interpreter?data=" + encodeURIComponent(query))
             .then(r => r.json()).then(d => {
                 d.elements.forEach(p => {
-                    let tipo = "Bazar Chino", icono = icons.gold, clase = "badge-bazar";
-
-                    if(p.tags.shop === "tobacco") {
-                        tipo = "Estanco Oficial"; icono = icons.red; clase = "badge-estanco";
-                    } else if(p.tags.amenity === "fuel") {
-                        tipo = "Gasolinera"; icono = icons.orange; clase = "badge-gas";
-                    }
-
-                    var searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(p.tags.name || tipo)}+${p.lat},${p.lon}`;
+                    let tipo = "Bazar / Supermercado", icono = icons.gold, clase = "badge-bazar";
+                    if(p.tags.shop === "tobacco") { tipo = "Estanco Oficial"; icono = icons.red; clase = "badge-estanco"; }
+                    else if(p.tags.amenity === "fuel") { tipo = "Gasolinera"; icono = icons.orange; clase = "badge-gas"; }
 
                     L.marker([p.lat, p.lon], {icon: icono}).addTo(map).bindPopup(`
                         <div class="popup-card">
                             <span class="type-badge ${clase}">${tipo}</span>
-                            <h3 style="margin:5px 0; font-size:15px;">${p.tags.name || "Bazar Alimentación"}</h3>
-                            <p style="font-size:11px; color:#666;">💨 Venta de Vapers 24h/Extendido</p>
-                            <a href="${searchUrl}" target="_blank" class="btn-google">VER HORARIO EN GOOGLE</a>
+                            <h3 style="margin:5px 0; font-size:15px;">${p.tags.name || tipo}</h3>
+                            <a href="https://maps.google.com/?cid=14443939784853440710&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQ{encodeURIComponent(p.tags.name || tipo)}+${p.lat},${p.lon}" target="_blank" class="btn-google">🕒 GOOGLE MAPS</a>
                         </div>
                     `);
                 });
             });
-        });
+        }
+
+        function copiarLista() {
+            const items = document.querySelectorAll('.captured-item');
+            let texto = "PUNTOS CAPTURADOS:\n";
+            items.forEach(i => texto += i.innerText + "\n---\n");
+            navigator.clipboard.writeText(texto);
+            alert("Lista copiada al portapapeles");
+        }
     </script>
 </body>
 </html>
