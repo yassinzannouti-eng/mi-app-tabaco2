@@ -13,7 +13,7 @@ body, html {
     margin:0;
     padding:0;
     height:100%;
-    font-family: 'Segoe UI', sans-serif;
+    font-family:'Segoe UI',sans-serif;
 }
 
 #map { height:100vh; width:100%; }
@@ -29,7 +29,8 @@ body, html {
     max-width:420px;
     border-radius:30px;
     overflow:hidden;
-    box-shadow:0 5px 20px rgba(0,0,0,0.2);
+    box-shadow:0 5px 20px rgba(0,0,0,0.25);
+    background:white;
 }
 
 .search-bar input {
@@ -37,6 +38,7 @@ body, html {
     padding:14px;
     border:none;
     outline:none;
+    font-size:14px;
 }
 
 .search-bar button {
@@ -45,6 +47,7 @@ body, html {
     border:none;
     padding:0 18px;
     cursor:pointer;
+    font-size:16px;
 }
 
 .popup-card {
@@ -55,9 +58,11 @@ body, html {
 .badge {
     font-size:10px;
     padding:4px 8px;
-    border-radius:5px;
+    border-radius:6px;
     color:white;
     font-weight:bold;
+    display:inline-block;
+    margin-bottom:6px;
 }
 </style>
 </head>
@@ -82,4 +87,114 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
 var markersLayer = L.layerGroup().addTo(map);
 
 var iconRed = L.icon({
-    icon
+    iconUrl:'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+    iconSize:[25,41],
+    iconAnchor:[12,41]
+});
+
+var iconGold = L.icon({
+    iconUrl:'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-gold.png',
+    iconSize:[25,41],
+    iconAnchor:[12,41]
+});
+
+map.locate({setView:true, zoom:16});
+
+map.on('locationfound', function(e){
+    buscarDatos(e.latlng.lat, e.latlng.lng);
+});
+
+function buscarDatos(lat, lng) {
+
+    markersLayer.clearLayers();
+
+    var query = `
+    [out:json][timeout:25];
+    (
+      node["shop"="tobacco"](around:2500,${lat},${lng});
+      node["shop"="convenience"](around:2500,${lat},${lng});
+      node["shop"="variety_store"](around:2500,${lat},${lng});
+      node["amenity"="fuel"](around:2500,${lat},${lng});
+    );
+    out body;
+    `;
+
+    fetch("https://overpass-api.de/api/interpreter", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: "data=" + encodeURIComponent(query)
+    })
+    .then(res => res.json())
+    .then(data => {
+
+        if (!data.elements) return;
+
+        data.elements.forEach(p => {
+
+            if (!p.tags) return;
+
+            let shopType = p.tags.shop || "";
+            let nombre = (p.tags.name || "").toLowerCase();
+
+            // 🚫 FILTRO DEFINITIVO
+            if (
+                shopType === "greengrocer" ||
+                shopType === "fishmonger" ||
+                shopType === "seafood" ||
+                shopType === "butcher" ||
+                nombre.includes("fruter") ||
+                nombre.includes("pescader") ||
+                nombre.includes("carnicer") ||
+                nombre.includes("charcuter")
+            ) {
+                return;
+            }
+
+            let esEstanco = shopType === "tobacco";
+            let esGas = p.tags.amenity === "fuel";
+
+            let titulo = p.tags.name || (esEstanco ? "Estanco" : (esGas ? "Gasolinera" : "Tienda"));
+
+            let icono = esEstanco ? iconRed : iconGold;
+            let badgeColor = esEstanco ? "#e11d48" : "#eab308";
+            let badgeText = esEstanco ? "ESTANCO" : (esGas ? "GASOLINERA" : "TIENDA");
+
+            let gLink = `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}`;
+
+            L.marker([p.lat, p.lon], { icon: icono })
+            .addTo(markersLayer)
+            .bindPopup(`
+                <div class="popup-card">
+                    <span class="badge" style="background:${badgeColor}">
+                        ${badgeText}
+                    </span>
+                    <h4>${titulo}</h4>
+                    <a href="${gLink}" target="_blank">Ver en Google</a>
+                </div>
+            `);
+
+        });
+
+    })
+    .catch(err => console.error("Error Overpass:", err));
+}
+
+function buscarManual(){
+    var val=document.getElementById('address').value;
+
+    fetch('https://nominatim.openstreetmap.org/search?format=json&q='+val)
+    .then(r=>r.json())
+    .then(data=>{
+        if(data.length>0){
+            map.setView([data[0].lat,data[0].lon],17);
+            buscarDatos(data[0].lat,data[0].lon);
+        }
+    });
+}
+
+</script>
+
+</body>
+</html>
