@@ -1,160 +1,141 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Buscador de Estancos</title>
-
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-
-<style>
-html,body{
-margin:0;
-height:100%;
-font-family:Arial, sans-serif;
-}
-
-#map{
-height:100%;
-width:100%;
-}
-
-.panel{
-position:absolute;
-top:10px;
-left:50%;
-transform:translateX(-50%);
-z-index:1000;
-background:white;
-padding:10px;
-border-radius:14px;
-box-shadow:0 4px 15px rgba(0,0,0,0.2);
-display:flex;
-gap:6px;
-}
-
-input{
-padding:8px;
-border-radius:8px;
-border:1px solid #ccc;
-}
-
-button{
-padding:8px 10px;
-border:none;
-border-radius:8px;
-background:#2563eb;
-color:white;
-font-weight:bold;
-cursor:pointer;
-}
-
-.status{
-position:absolute;
-bottom:15px;
-left:50%;
-transform:translateX(-50%);
-background:white;
-padding:6px 12px;
-border-radius:10px;
-font-size:13px;
-box-shadow:0 3px 10px rgba(0,0,0,0.2);
-}
-</style>
-</head>
-<body>
-
-<div class="panel">
-<input type="text" id="city" placeholder="Ciudad...">
-<button onclick="buscarCiudad()">Ir</button>
-<button onclick="buscarEstancos()">Buscar</button>
-</div>
-
-<div id="map"></div>
-<div class="status" id="status">Listo</div>
-
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
 <script>
+document.addEventListener("DOMContentLoaded",()=>{
 
-const map = L.map('map').setView([40.4168,-3.7038],6);
+const map=L.map('map').setView([40.41,-3.70],6);
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-attribution:'© OpenStreetMap'
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{
+attribution:'©OpenStreetMap ©CARTO'
 }).addTo(map);
 
-let markers=[];
+let userLocation=null;
+let currentElements=[];
+const cluster=L.markerClusterGroup();
+map.addLayer(cluster);
 
-function estado(text){
-document.getElementById("status").innerText=text;
+map.locate({enableHighAccuracy:true});
+map.on('locationfound',e=>{userLocation=e.latlng;});
+
+function icon(color){
+return L.icon({
+iconUrl:`https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
+shadowUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+iconSize:[25,41],iconAnchor:[12,41]
+});
 }
 
-function limpiar(){
-markers.forEach(m=>map.removeLayer(m));
-markers=[];
+const icons={
+normal:icon("red"),
+closed:icon("grey")
+};
+
+function distanciaKm(a,b,c,d){
+function r(x){return x*Math.PI/180;}
+const R=6371;
+const dLat=r(c-a);
+const dLon=r(d-b);
+const h=Math.sin(dLat/2)**2+
+Math.cos(r(a))*Math.cos(r(c))*
+Math.sin(dLon/2)**2;
+return R*2*Math.atan2(Math.sqrt(h),Math.sqrt(1-h));
 }
 
-async function buscarCiudad(){
-const ciudad=document.getElementById("city").value;
-if(!ciudad)return;
+function analizarHorario(opening){
+if(!opening)return {estado:null,texto:"⚠️ Sin horario registrado"};
 
-estado("Buscando ciudad...");
+if(opening.includes("24/7"))
+return {estado:true,texto:"🟢 Abierto 24/7"};
 
-const res=await fetch("https://nominatim.openstreetmap.org/search?format=json&q="+encodeURIComponent(ciudad));
-const data=await res.json();
+const ahora=new Date();
+const min=ahora.getHours()*60+ahora.getMinutes();
+const rangos=[...opening.matchAll(/(\d{2}:\d{2})-(\d{2}:\d{2})/g)];
 
-if(data.length){
-map.flyTo([data[0].lat,data[0].lon],14);
-estado("Ciudad encontrada");
-}else{
-estado("No encontrada");
+for(let r of rangos){
+const ini=r[1].split(":");
+const fin=r[2].split(":");
+const mi=parseInt(ini[0])*60+parseInt(ini[1]);
+const mf=parseInt(fin[0])*60+parseInt(fin[1]);
+
+if(min>=mi&&min<=mf){
+return {estado:true,texto:"🟢 Abierto ahora"};
 }
 }
 
-async function buscarEstancos(){
+return {estado:false,texto:"🔴 Cerrado ahora"};
+}
 
-limpiar();
-estado("Buscando...");
+async function buscar(){
+const c=map.getCenter();
+const r=6000;
 
-const centro=map.getCenter();
-const radio=2000;
+const query=`[out:json];
+(node["shop"="tobacco"](around:${r},${c.lat},${c.lng}););out;`;
 
-const query=`[out:json][timeout:20];
-node["shop"="tobacco"](around:${radio},${centro.lat},${centro.lng});
-out;`;
+const resp=await fetch("https://overpass-api.de/api/interpreter",{method:"POST",body:query});
+const data=await resp.json();
 
-try{
-const res=await fetch("https://overpass-api.de/api/interpreter",{
-method:"POST",
-body:query
+currentElements=data.elements||[];
+render();
+}
+
+function render(){
+
+cluster.clearLayers();
+
+let lista=[...currentElements];
+
+const onlyOpen=document.getElementById("toggleOnlyOpen").checked;
+const greyClosed=document.getElementById("toggleGreyClosed").checked;
+const searchText=document.getElementById("internalSearch").value.toLowerCase();
+
+if(searchText){
+lista=lista.filter(p=>p.tags?.name?.toLowerCase().includes(searchText));
+}
+
+lista=lista.map(p=>{
+const horario=analizarHorario(p.tags?.opening_hours);
+let dist=null;
+if(userLocation){
+dist=distanciaKm(userLocation.lat,userLocation.lng,p.lat,p.lon);
+}
+return {...p,horario,dist};
 });
 
-const data=await res.json();
+lista.sort((a,b)=>{
+if(a.horario.estado===true && b.horario.estado!==true) return -1;
+if(a.horario.estado!==true && b.horario.estado===true) return 1;
+return (a.dist||999)-(b.dist||999);
+});
 
-if(!data.elements.length){
-estado("No se encontraron estancos aquí");
-return;
-}
+lista.forEach(p=>{
 
-data.elements.forEach(p=>{
-const marker=L.marker([p.lat,p.lon]).addTo(map);
+if(onlyOpen && p.horario.estado===false) return;
+
+let icono=icons.normal;
+if(p.horario.estado===false && greyClosed) icono=icons.closed;
+
+const marker=L.marker([p.lat,p.lon],{icon:icono});
+
 marker.bindPopup(`
-<b>${p.tags?.name||"Estanco"}</b><br><br>
-<a href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}" target="_blank">
-Cómo llegar
-</a>
+<b>${p.tags?.name||"Estanco"}</b><br>
+${p.horario.texto}
+${p.dist?`<div style="font-size:12px;color:#555;">${p.dist.toFixed(2)} km</div>`:""}
+<br><br>
+<a href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}" target="_blank">Cómo llegar</a>
 `);
-markers.push(marker);
+
+cluster.addLayer(marker);
+
 });
 
-estado(data.elements.length+" encontrados");
-
-}catch(e){
-estado("Servidor lento, prueba otra zona");
-}
 }
 
+document.getElementById("internalSearch").oninput=render;
+document.getElementById("toggleOnlyOpen").onchange=render;
+document.getElementById("toggleGreyClosed").onchange=render;
+
+map.on("moveend",buscar);
+
+setTimeout(buscar,1500);
+
+});
 </script>
-
-</body>
-</html>
