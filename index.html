@@ -3,162 +3,117 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vaper Tracker Pro - Visual Focus</title>
+    <title>Vaper Tracker - Visualización Pro</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <style>
         :root {
-            --bg-dark: #0a0f1d;
-            --glass: rgba(26, 32, 53, 0.85);
+            --bg-dark: #0f172a;
             --accent: #3b82f6;
-            --red-glow: #ff4d4d;
-            --gold-glow: #ffd700;
+            --glass: rgba(30, 41, 59, 0.9);
         }
 
-        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg-dark); }
-        #map { height: 100vh; width: 100%; background: var(--bg-dark); }
+        body, html { margin: 0; padding: 0; height: 100%; font-family: sans-serif; background: var(--bg-dark); }
+        #map { height: 100vh; width: 100%; }
 
-        /* Buscador Superior Suavizado */
-        .top-ui {
-            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
-            z-index: 1000; width: 85%; max-width: 420px;
+        /* Buscador Superior */
+        .top-nav {
+            position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
+            z-index: 1000; width: 90%; max-width: 400px;
         }
         .search-container {
-            display: flex; background: var(--glass); backdrop-filter: blur(12px);
-            border-radius: 20px; border: 1px solid rgba(255,255,255,0.1);
-            box-shadow: 0 15px 35px rgba(0,0,0,0.5); overflow: hidden;
+            display: flex; background: var(--glass); backdrop-filter: blur(10px);
+            border-radius: 15px; border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5); overflow: hidden;
         }
-        .search-container input { flex: 1; padding: 15px 20px; border: none; background: transparent; color: white; outline: none; font-size: 15px; }
-        .search-container button { padding: 15px 20px; border: none; background: var(--accent); color: white; cursor: pointer; transition: 0.3s; }
+        .search-container input { flex: 1; padding: 14px; border: none; background: transparent; color: white; outline: none; }
+        .search-container button { padding: 14px 20px; border: none; background: var(--accent); color: white; cursor: pointer; }
 
-        /* Botones Flotantes (FABS) */
-        .side-controls {
-            position: absolute; bottom: 30px; right: 20px;
-            z-index: 1000; display: flex; flex-direction: column; gap: 15px;
-        }
-        .fab {
-            width: 60px; height: 60px; border-radius: 20px; border: none;
-            background: var(--glass); backdrop-filter: blur(10px); color: white;
-            font-size: 24px; cursor: pointer; border: 1px solid rgba(255,255,255,0.1);
-            box-shadow: 0 8px 20px rgba(0,0,0,0.4); transition: 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        /* Botón GPS Flotante */
+        .btn-gps {
+            position: absolute; bottom: 30px; right: 20px; z-index: 1000;
+            width: 60px; height: 60px; border-radius: 50%; border: none;
+            background: var(--accent); color: white; font-size: 24px;
+            box-shadow: 0 5px 15px rgba(59, 130, 246, 0.4); cursor: pointer;
             display: flex; align-items: center; justify-content: center;
         }
-        .fab:active { transform: scale(0.9); }
-        .fab.active { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 20px var(--accent); }
 
-        /* Sidebar con bordes extra suaves */
-        #sidebar {
-            position: absolute; left: -320px; top: 0; width: 280px; height: 100%;
-            background: var(--glass); backdrop-filter: blur(20px); z-index: 2000;
-            transition: 0.4s ease; padding: 30px; color: white;
-            border-right: 1px solid rgba(255,255,255,0.1); box-shadow: 15px 0 40px rgba(0,0,0,0.6);
-        }
-        #sidebar.active { left: 0; }
-        .coord-card { background: rgba(255,255,255,0.05); padding: 15px; border-radius: 15px; margin-top: 15px; border-left: 4px solid var(--accent); }
-
-        /* Popups Estilo App */
-        .leaflet-popup-content-wrapper { background: #1a2035; color: white; border-radius: 20px; padding: 5px; }
-        .leaflet-popup-tip { background: #1a2035; }
+        /* Popups Estilizados */
+        .leaflet-popup-content-wrapper { background: #1e293b; color: white; border-radius: 12px; }
+        .leaflet-popup-tip { background: #1e293b; }
         .btn-google {
-            display: block; background: var(--accent); color: white; text-align: center;
-            padding: 12px; border-radius: 12px; text-decoration: none; margin-top: 10px;
-            font-weight: bold; font-size: 13px;
+            display: block; background: #4285F4; color: white; text-align: center;
+            padding: 10px; border-radius: 8px; text-decoration: none; margin-top: 10px; font-weight: bold;
         }
     </style>
 </head>
 <body>
 
-    <div class="top-ui">
+    <div class="top-nav">
         <div class="search-container">
-            <input type="text" id="searchInput" placeholder="Buscar ubicación...">
+            <input type="text" id="target" placeholder="Buscar ciudad o calle...">
             <button onclick="buscarManual()">🔍</button>
         </div>
     </div>
 
-    <div id="sidebar">
-        <h2 style="margin-top:0; color:var(--accent);">Puntos BOE</h2>
-        <p style="font-size:13px; opacity:0.6;">Activa el modo (📝) para capturar.</p>
-        <div id="listaCoords"></div>
-        <button onclick="document.getElementById('sidebar').classList.remove('active')" style="margin-top:30px; width:100%; padding:10px; border-radius:10px; border:1px solid #444; background:transparent; color:white; cursor:pointer;">Cerrar panel</button>
-    </div>
-
-    <div class="side-controls">
-        <button class="fab" id="gpsBtn" onclick="centrarGPS()" title="Centrar GPS">🎯</button>
-        <button class="fab" id="editBtn" onclick="toggleEditMode()" title="Modo Captura">📝</button>
-    </div>
+    <button class="btn-gps" onclick="centrarGPS()">🎯</button>
 
     <div id="map"></div>
 
     <script>
-        let isEditMode = false;
-        
-        // 1. Inicializar Mapa Nocturno
-        const map = L.map('map', { zoomControl: false, maxZoom: 20 }).setView([40.41, -3.7], 6);
+        // Inicialización Mapa Nocturno
+        var map = L.map('map', { zoomControl: false, maxZoom: 19 }).setView([40.41, -3.70], 6);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
 
-        // 2. Función de Centrado GPS Profesional
+        // Definición de Iconos clásicos (Alta visibilidad)
+        var iconRed = L.icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+            iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+        });
+
+        var iconGold = L.icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-gold.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+            iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+        });
+
         function centrarGPS() {
-            map.locate({ setView: true, maxZoom: 17, enableHighAccuracy: true });
+            map.locate({setView: true, maxZoom: 16, enableHighAccuracy: true});
         }
 
-        centrarGPS(); // Centrar al inicio
+        // Al cargar, centrar automáticamente
+        centrarGPS();
 
-        map.on('locationfound', (e) => {
-            // Círculo de posición de usuario suavizado
-            L.circle(e.latlng, { radius: 20, color: '#3b82f6', weight: 1, fillOpacity: 0.15 }).addTo(map);
-            fetchData(e.latlng.lat, e.latlng.lng);
+        map.on('locationfound', function(e) {
+            L.circle(e.latlng, {radius: 20, color: '#3b82f6'}).addTo(map);
+            cargarDatos(e.latlng.lat, e.latlng.lng);
         });
 
-        // 3. Lógica de Captura (Solo si el modo edición está ON)
-        function toggleEditMode() {
-            isEditMode = !isEditMode;
-            document.getElementById('editBtn').classList.toggle('active');
-            if(isEditMode) alert("Modo Captura activado: Toca el mapa para guardar coordenadas.");
-        }
-
-        map.on('click', (e) => {
-            if (!isEditMode) return;
-            const lat = e.latlng.lat.toFixed(6);
-            const lng = e.latlng.lng.toFixed(6);
-            const card = document.createElement("div");
-            card.className = "coord-card";
-            card.innerHTML = `<b>Localización BOE</b><br><small>${lat}, ${lng}</small>`;
-            document.getElementById("listaCoords").prepend(card);
-            document.getElementById('sidebar').classList.add('active');
-        });
-
-        // 4. Carga de Locales con Prioridad Visual
-        function fetchData(lat, lng) {
-            const query = `[out:json];(node["shop"~"tobacco|variety_store|convenience"](around:2500,${lat},${lng});node["amenity"="fuel"](around:2500,${lat},${lng}););out;`;
+        function cargarDatos(lat, lng) {
+            // Buscamos Tobacco y tiendas tipo Bazar (variety_store / convenience)
+            var query = `[out:json];(node["shop"~"tobacco|variety_store|convenience"](around:3000,${lat},${lng});node["amenity"="fuel"](around:3000,${lat},${lng}););out;`;
             
             fetch("https://overpass-api.de/api/interpreter?data=" + encodeURIComponent(query))
-            .then(r => r.json()).then(data => {
-                data.elements.forEach(p => {
-                    const name = (p.tags.name || "").toLowerCase();
-                    // Filtro de exclusión total de fruterías/pescaderías
-                    const filter = ["pesca", "fruta", "verdu", "carni", "baker", "charcu", "panad"];
-                    if (filter.some(w => name.includes(w))) return;
+            .then(r => r.json()).then(d => {
+                d.elements.forEach(p => {
+                    var nombre = (p.tags.name || "").toLowerCase();
+                    
+                    // Filtro para eliminar pescaderías/fruterías
+                    var excluir = ["pesca", "fruta", "verdu", "carni", "baker", "panad", "charcu"];
+                    if (excluir.some(w => nombre.includes(w))) return;
 
-                    const esEstanco = p.tags.shop === "tobacco";
-                    const color = esEstanco ? "#ff4d4d" : "#ffd700";
-
-                    // Crear marcador interactivo
-                    const marker = L.circleMarker([p.lat, p.lon], {
-                        radius: 11,
-                        fillColor: color,
-                        color: "#fff",
-                        weight: 2,
-                        fillOpacity: 0.9,
-                        interactive: true // Esto da prioridad al toque sobre el mapa
-                    }).addTo(map);
-
-                    marker.bindPopup(`
-                        <div style="text-align:center; padding:5px;">
-                            <b style="color:${color}; font-size:14px;">${esEstanco ? 'ESTANCO' : 'BAZAR / SUPER'}</b>
-                            <div style="margin:8px 0; font-size:13px;">${p.tags.name || 'Local sin nombre'}</div>
-                            <a href="https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}" target="_blank" class="btn-google">ABRIR GOOGLE MAPS</a>
+                    var esEstanco = p.tags.shop === "tobacco";
+                    var titulo = p.tags.name || (esEstanco ? "Estanco" : "Bazar / Gasolinera");
+                    
+                    L.marker([p.lat, p.lon], {icon: esEstanco ? iconRed : iconGold}).addTo(map)
+                    .bindPopup(`
+                        <div style="text-align:center">
+                            <b style="color:${esEstanco ? '#ff4d4d' : '#fbbf24'}">${esEstanco ? 'ESTANCO' : 'BAZAR / SUPER'}</b>
+                            <div style="margin:5px 0">${titulo}</div>
+                            <a href="https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}" target="_blank" class="btn-google">VER HORARIO</a>
                         </div>
                     `);
                 });
@@ -166,12 +121,12 @@
         }
 
         function buscarManual() {
-            const val = document.getElementById('searchInput').value;
-            fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${val}`)
-            .then(r => r.json()).then(d => {
-                if(d[0]) {
-                    map.setView([d[0].lat, d[0].lon], 17);
-                    fetchData(d[0].lat, d[0].lon);
+            var val = document.getElementById('target').value;
+            fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + val)
+            .then(r => r.json()).then(data => {
+                if(data.length > 0) {
+                    map.setView([data[0].lat, data[0].lon], 16);
+                    cargarDatos(data[0].lat, data[0].lon);
                 }
             });
         }
