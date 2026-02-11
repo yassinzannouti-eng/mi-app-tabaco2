@@ -3,127 +3,170 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vaper Tracker Pro</title>
+    <title>Vaper Tracker Pro - Night Edition</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; font-family: sans-serif; background: #f0f0f0; }
-        #map { height: 100vh; width: 100%; z-index: 1; }
-
-        /* Controles superiores */
-        .header {
-            position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
-            z-index: 1000; width: 90%; max-width: 450px;
+        :root {
+            --bg-dark: #0f172a;
+            --panel-bg: rgba(30, 41, 59, 0.85);
+            --accent: #3b82f6;
+            --gold: #fbbf24;
+            --red: #ef4444;
+            --text: #f1f5f9;
         }
-        .search-box { display: flex; box-shadow: 0 4px 12px rgba(0,0,0,0.2); border-radius: 30px; overflow: hidden; background: white; }
-        .search-box input { flex: 1; padding: 12px 20px; border: none; outline: none; font-size: 14px; }
-        .search-box button { padding: 12px 18px; border: none; background: #2563eb; color: white; cursor: pointer; font-weight: bold; }
 
-        /* Sidebar de coordenadas */
+        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Segoe UI', Roboto, sans-serif; background: var(--bg-dark); overflow: hidden; }
+        #map { height: 100vh; width: 100%; background: var(--bg-dark); }
+
+        /* Interfaz Suavizada */
+        .ui-overlay {
+            position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
+            z-index: 1000; width: 90%; max-width: 420px;
+        }
+
+        .search-box {
+            display: flex; background: var(--panel-bg); backdrop-filter: blur(12px);
+            border-radius: 16px; border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.4); overflow: hidden;
+        }
+
+        .search-box input {
+            flex: 1; padding: 14px 20px; border: none; outline: none;
+            background: transparent; color: var(--text); font-size: 15px;
+        }
+
+        .search-box button {
+            padding: 0 20px; border: none; background: var(--accent); color: white;
+            cursor: pointer; transition: 0.3s;
+        }
+
+        /* Sidebar con bordes suaves */
         #sidebar {
-            position: absolute; left: -280px; top: 0; width: 260px; height: 100%;
-            background: white; z-index: 2000; transition: 0.3s ease; padding: 20px;
-            box-shadow: 2px 0 10px rgba(0,0,0,0.2); overflow-y: auto;
+            position: absolute; left: -300px; top: 0; width: 280px; height: 100%;
+            background: var(--panel-bg); backdrop-filter: blur(15px); z-index: 2000;
+            transition: 0.4s cubic-bezier(0.4, 0, 0.2, 1); padding: 25px;
+            color: var(--text); border-right: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 10px 0 30px rgba(0,0,0,0.5);
         }
         #sidebar.active { left: 0; }
-        .menu-btn { position: absolute; left: 15px; top: 75px; z-index: 1500; background: white; border: 1px solid #ccc; padding: 10px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: bold; }
 
-        /* Tarjetas de coordenadas */
-        .coord-card { background: #eef2ff; padding: 10px; border-radius: 8px; margin-bottom: 8px; border-left: 4px solid #2563eb; font-size: 11px; }
+        /* Botones Flotantes */
+        .fab-container { position: absolute; bottom: 30px; right: 20px; z-index: 1500; display: flex; flex-direction: column; gap: 12px; }
         
-        /* Popups */
-        .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; color: white; font-weight: bold; font-size: 10px; margin-bottom: 5px; }
-        .btn-google { display: block; text-align: center; background: #4285F4; color: white; padding: 8px; text-decoration: none; border-radius: 5px; margin-top: 10px; font-size: 12px; font-weight: bold; }
+        .fab {
+            width: 56px; height: 56px; border-radius: 18px; border: none;
+            background: var(--panel-bg); color: var(--text); font-size: 24px;
+            cursor: pointer; box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+            backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1);
+            transition: 0.3s; display: flex; align-items: center; justify-content: center;
+        }
+        .fab.active { background: var(--accent); color: white; border-color: var(--accent); }
+        .fab:active { transform: scale(0.95); }
+
+        .coord-item {
+            background: rgba(255,255,255,0.05); padding: 12px; border-radius: 12px;
+            margin-bottom: 10px; border-left: 4px solid var(--accent); font-size: 12px;
+        }
+
+        /* Popups Estilo Nocturno */
+        .leaflet-popup-content-wrapper { background: var(--panel-bg); color: var(--text); border-radius: 16px; border: 1px solid rgba(255,255,255,0.1); }
+        .leaflet-popup-tip { background: var(--panel-bg); }
+        .btn-google {
+            display: block; background: var(--accent); color: white; text-align: center;
+            padding: 10px; border-radius: 10px; text-decoration: none; margin-top: 10px; font-weight: bold;
+        }
     </style>
 </head>
 <body>
 
-    <div class="header">
+    <div class="ui-overlay">
         <div class="search-box">
-            <input type="text" id="target" placeholder="Buscar ciudad o calle...">
+            <input type="text" id="target" placeholder="Buscar zona...">
             <button onclick="buscarManual()">🔍</button>
         </div>
     </div>
 
-    <button class="menu-btn" onclick="document.getElementById('sidebar').classList.toggle('active')">📋 PUNTOS BOE</button>
-
     <div id="sidebar">
-        <h3>Captura Manual</h3>
-        <p><small>Toca el mapa para registrar coordenadas del BOE.</small></p>
+        <h2 style="color: var(--accent)">Captura BOE</h2>
+        <p style="font-size: 13px; opacity: 0.7;">Activa el modo edición (📝) y toca el mapa para guardar puntos.</p>
         <div id="lista-coords"></div>
+        <button onclick="document.getElementById('sidebar').classList.remove('active')" style="margin-top:20px; background:none; border:1px solid #444; color:white; padding:8px; border-radius:8px; width:100%;">Cerrar</button>
+    </div>
+
+    <div class="fab-container">
+        <button class="fab" id="editBtn" onclick="toggleEditMode()" title="Modo Edición">📝</button>
+        <button class="fab" onclick="geolocalizar()" title="Mi ubicación">🎯</button>
     </div>
 
     <div id="map"></div>
 
     <script>
-        // 1. Inicializar mapa con Zoom libre hasta nivel 20
+        let editMode = false;
+        
+        // 1. Mapa Nocturno (CartoDB Dark Matter)
         var map = L.map('map', { zoomControl: false, maxZoom: 20 }).setView([40.41, -3.70], 6);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 20 }).addTo(map);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '© CartoDB'
+        }).addTo(map);
 
-        // 2. Localización Precisa Forzada
+        function toggleEditMode() {
+            editMode = !editMode;
+            const btn = document.getElementById('editBtn');
+            btn.classList.toggle('active');
+            if(editMode) {
+                alert("Modo Edición: Toca el mapa para capturar coordenadas.");
+            }
+        }
+
         function geolocalizar() {
-            map.locate({
-                setView: true, 
-                maxZoom: 17,
-                enableHighAccuracy: true,
-                timeout: 10000
-            });
+            map.locate({ setView: true, maxZoom: 17, enableHighAccuracy: true });
         }
 
         geolocalizar();
 
         map.on('locationfound', (e) => {
-            L.circle(e.latlng, { radius: 15, color: '#2563eb' }).addTo(map);
-            cargarTiendas(e.latlng.lat, e.latlng.lng);
+            L.circle(e.latlng, { radius: 20, color: '#3b82f6', fillOpacity: 0.2 }).addTo(map);
+            cargarPuntos(e.latlng.lat, e.latlng.lng);
         });
 
-        map.on('locationerror', () => {
-            alert("Error: Activa el GPS y refresca la página.");
-        });
-
-        // 3. Captura al hacer clic (Sidebar)
+        // Captura SOLO si editMode está activo
         map.on('click', (e) => {
+            if(!editMode) return;
+            
             const lat = e.latlng.lat.toFixed(6);
             const lng = e.latlng.lng.toFixed(6);
             const div = document.createElement("div");
-            div.className = "coord-card";
-            div.innerHTML = `<b>Nuevo Punto:</b><br>${lat}, ${lng}`;
+            div.className = "coord-item";
+            div.innerHTML = `<b>Coordenada:</b><br>${lat}, ${lng}`;
             document.getElementById("lista-coords").prepend(div);
             document.getElementById('sidebar').classList.add('active');
         });
 
-        // 4. Carga y Filtro (Elimina fruterías/pescaderías)
-        function cargarTiendas(lat, lng) {
-            // Buscamos estancos, bazares y tiendas de conveniencia
-            const query = `[out:json];(node["shop"~"tobacco|variety_store|convenience"](around:2000,${lat},${lng});node["amenity"="fuel"](around:2000,${lat},${lng}););out;`;
+        function cargarPuntos(lat, lng) {
+            // Filtro de Tobacco y Variety/Convenience (Bazares)
+            const query = `[out:json];(node["shop"~"tobacco|variety_store|convenience"](around:2500,${lat},${lng});node["amenity"="fuel"](around:2500,${lat},${lng}););out;`;
             
             fetch("https://overpass-api.de/api/interpreter?data=" + encodeURIComponent(query))
             .then(res => res.json()).then(data => {
                 data.elements.forEach(p => {
                     const name = (p.tags.name || "").toLowerCase();
-                    
-                    // FILTRO DE SEGURIDAD ABSOLUTO
-                    const prohibido = ["pesca", "fruta", "verdu", "carni", "baker", "charcu", "panad", "frutas"];
-                    if (prohibido.some(p => name.includes(p))) return;
+                    const prohibido = ["pesca", "fruta", "verdu", "carni", "baker", "charcu", "panad"];
+                    if (prohibido.some(word => name.includes(word))) return;
 
                     const esEstanco = p.tags.shop === "tobacco";
+                    const color = esEstanco ? "#ef4444" : "#fbbf24";
                     const titulo = p.tags.name || (esEstanco ? "Estanco" : "Bazar / Supermercado");
-                    const color = esEstanco ? "#ef4444" : "#facc15"; // Rojo o Amarillo/Oro
 
-                    // Marcadores de círculo (No fallan nunca, no cargan imágenes externas)
                     L.circleMarker([p.lat, p.lon], {
-                        radius: 9,
-                        fillColor: color,
-                        color: "#000",
-                        weight: 1,
-                        fillOpacity: 0.9
+                        radius: 10, fillColor: color, color: "#fff", weight: 1, fillOpacity: 0.9
                     }).addTo(map).bindPopup(`
                         <div style="text-align:center">
-                            <span class="badge" style="background:${color}; color:${esEstanco?'white':'black'}">${esEstanco ? 'ESTANCO' : 'BAZAR / SÚPER'}</span>
-                            <div style="font-weight:bold; margin-bottom:5px;">${titulo}</div>
-                            <a href="https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}" target="_blank" class="btn-google">VER HORARIO</a>
+                            <b style="color:${color}">${esEstanco ? 'ESTANCO' : 'BAZAR / SUPER'}</b>
+                            <div style="margin:5px 0">${titulo}</div>
+                            <a href="https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}" target="_blank" class="btn-google">ABRIR EN GOOGLE</a>
                         </div>
                     `);
                 });
@@ -136,7 +179,7 @@
             .then(r => r.json()).then(d => {
                 if(d[0]) {
                     map.setView([d[0].lat, d[0].lon], 17);
-                    cargarTiendas(d[0].lat, d[0].lon);
+                    cargarPuntos(d[0].lat, d[0].lon);
                 }
             });
         }
