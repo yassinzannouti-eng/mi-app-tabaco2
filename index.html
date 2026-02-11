@@ -1,99 +1,49 @@
 <script>
 
-document.addEventListener("DOMContentLoaded", () => {
-
-// ================= MAPA =================
-
 const map = L.map('map', { zoomControl:false }).setView([40.41,-3.70],6);
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{
 maxZoom:19,
 attribution:'© OpenStreetMap'
 }).addTo(map);
 
 const markersLayer = L.layerGroup().addTo(map);
 
-const searchBtn = document.getElementById("searchCenterButton");
-const searchInput = document.getElementById("address");
-
-// ================= ICONOS =================
-
 const iconEstanco = L.icon({
 iconUrl:'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
 shadowUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-iconSize:[25,41], iconAnchor:[12,41]
+iconSize:[30,50], iconAnchor:[15,50]
 });
 
 const iconTienda = L.icon({
 iconUrl:'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-gold.png',
 shadowUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-iconSize:[25,41], iconAnchor:[12,41]
+iconSize:[30,50], iconAnchor:[15,50]
 });
 
-// ================= USUARIO =================
+const userMarker = L.circleMarker([0,0],{
+radius:8, color:'white',
+fillColor:'#2563eb', fillOpacity:1, weight:3
+}).addTo(map);
 
-let userLatLng = null;
-
-map.locate({ enableHighAccuracy:true });
+// SOLO obtiene tu ubicación una vez al iniciar (sin recentrar luego)
+map.locate();
 
 map.on('locationfound', e=>{
-userLatLng = e.latlng;
+userMarker.setLatLng(e.latlng);
 });
 
-// Botón suave (no agresivo)
-const locateBtn = document.getElementById('locateButton');
-if(locateBtn){
-locateBtn.onclick = ()=>{
-if(userLatLng){
-map.flyTo(userLatLng, 16, {duration:1});
-}
-};
-}
+// ================= BUSCAR DATOS =================
 
-// ================= CACHE + CONTROL =================
-
-const cache = new Map();
-let lastKey = null;
-
-function calcularRadio(){
-const zoom = map.getZoom();
-if(zoom >= 17) return 800;
-if(zoom >= 15) return 1500;
-if(zoom >= 13) return 3000;
-if(zoom >= 11) return 6000;
-return 10000;
-}
-
-function generarKey(){
-const c = map.getCenter();
-return `${c.lat.toFixed(2)}_${c.lng.toFixed(2)}_${map.getZoom()}`;
-}
-
-// ================= BUSCAR =================
-
-async function buscarDatos(){
-
-const key = generarKey();
-if(key === lastKey) return; // evita duplicados
-lastKey = key;
-
-if(searchBtn) searchBtn.style.display = "none";
+async function buscarDatos(lat,lng){
 
 markersLayer.clearLayers();
 
-if(cache.has(key)){
-pintar(cache.get(key));
-return;
-}
-
-const center = map.getCenter();
-const radius = calcularRadio();
-
 const query = `
-[out:json][timeout:20];
+[out:json][timeout:25];
 (
-node["shop"="tobacco"](around:${radius},${center.lat},${center.lng});
-node["shop"~"convenience|variety_store|supermarket"](around:${radius},${center.lat},${center.lng});
+node["shop"="tobacco"](around:2000,${lat},${lng});
+node["shop"~"convenience|variety_store|supermarket"](around:2000,${lat},${lng});
 );
 out;
 `;
@@ -101,47 +51,45 @@ out;
 try{
 const response = await fetch("https://overpass-api.de/api/interpreter",{
 method:"POST",
-body:query
+body: query
 });
 
 if(!response.ok) throw new Error();
 
 const data = await response.json();
-const elements = data.elements || [];
 
-cache.set(key, elements);
-pintar(elements);
-
-}catch{
-console.log("Overpass ocupado");
-}
-}
-
-function pintar(elements){
-
-markersLayer.clearLayers();
-
-elements.forEach(p=>{
-if(!p.lat || !p.lon) return;
-
-const esEstanco = p.tags?.shop === "tobacco";
-const nombre = p.tags?.name || (esEstanco?"ESTANCO":"TIENDA");
+data.elements.forEach(p=>{
+const esEstanco = p.tags.shop==="tobacco";
+const nombre = p.tags.name || (esEstanco?"ESTANCO":"TIENDA");
 
 L.marker([p.lat,p.lon],{
 icon: esEstanco?iconEstanco:iconTienda
 })
 .addTo(markersLayer)
-.bindPopup(`<b>${nombre}</b>`);
+.bindPopup(`
+<b>${nombre}</b><br>
+<a href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}" target="_blank">
+Cómo llegar
+</a>
+`);
 });
 
+}catch(e){
+alert("Servidor ocupado. Intenta en unos segundos.");
+}
 }
 
-// ================= BUSCADOR MANUAL =================
+// ================= BOTÓN BUSCAR EN ESTA ÁREA =================
+
+function buscarEnEstaArea(){
+const center = map.getCenter();
+buscarDatos(center.lat, center.lng);
+}
+
+// ================= BUSCAR MANUAL =================
 
 async function buscarManual(){
-
-if(!searchInput) return;
-const val = searchInput.value.trim();
+const val = document.getElementById('address').value;
 if(!val) return;
 
 try{
@@ -152,33 +100,23 @@ const response = await fetch(
 const data = await response.json();
 
 if(data.length){
-map.flyTo([data[0].lat,data[0].lon],15,{duration:1});
+const lat = parseFloat(data[0].lat);
+const lon = parseFloat(data[0].lon);
+map.setView([lat,lon],16);
+}else{
+alert("No encontrado");
 }
-}catch{
-console.log("Error búsqueda");
+}catch(e){
+alert("Error en búsqueda");
 }
 }
 
-const searchButton = document.getElementById('searchButton');
-if(searchButton) searchButton.onclick = buscarManual;
+// ================= EVENTOS =================
 
-// ================= SISTEMA MOVIMIENTO INTELIGENTE =================
+document.getElementById('searchButton').onclick = buscarManual;
+document.getElementById('searchCenterButton').onclick = buscarEnEstaArea;
+document.getElementById('locateButton').onclick = ()=>{
+map.locate({setView:true, zoom:17});
+};
 
-let moveTimer;
-
-map.on("movestart", ()=>{
-if(searchBtn) searchBtn.style.display = "block";
-});
-
-map.on("moveend", ()=>{
-clearTimeout(moveTimer);
-moveTimer = setTimeout(buscarDatos, 900);
-});
-
-if(searchBtn) searchBtn.onclick = buscarDatos;
-
-// Primera carga automática
-setTimeout(buscarDatos, 1000);
-
-});
-  </script>
+</script>
