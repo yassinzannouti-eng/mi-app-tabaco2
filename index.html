@@ -3,122 +3,124 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vaper Tracker Pro - Versión Recuperada</title>
+    <title>Vaper Tracker Pro - Versión Final</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; font-family: Arial, sans-serif; }
-        #map { height: 100vh; width: 100%; }
-
-        /* Buscador simple y funcional */
-        .search-container {
-            position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
-            z-index: 1000; width: 85%; max-width: 400px; display: flex;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.2); border-radius: 8px; overflow: hidden;
-        }
-        .search-container input { flex: 1; padding: 12px; border: none; outline: none; }
-        .search-container button { padding: 12px; border: none; background: #2563eb; color: white; cursor: pointer; }
-
-        /* Botón GPS */
-        .gps-button {
-            position: absolute; bottom: 20px; right: 20px; z-index: 1000;
-            width: 50px; height: 50px; border-radius: 50%; border: none;
-            background: white; color: #333; font-size: 24px; cursor: pointer;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center;
+        /* Estilo Nocturno Suavizado */
+        :root {
+            --bg-dark: #0f172a;
+            --glass: rgba(30, 41, 59, 0.95);
+            --accent: #3b82f6;
+            --text: #f1f5f9;
         }
 
-        /* Estilo de la ventana de información */
-        .info-box { text-align: center; min-width: 120px; }
-        .btn-link { display: block; margin-top: 10px; padding: 8px; background: #4285F4; color: white; text-decoration: none; border-radius: 4px; font-weight: bold; font-size: 12px; }
+        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Segoe UI', sans-serif; background: var(--bg-dark); }
+        #map { height: 100vh; width: 100%; background: var(--bg-dark); }
+
+        /* Buscador Superior */
+        .top-ui {
+            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+            z-index: 1000; width: 85%; max-width: 420px;
+        }
+        .search-box {
+            display: flex; background: var(--glass); backdrop-filter: blur(10px);
+            border-radius: 16px; border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); overflow: hidden;
+        }
+        .search-box input { flex: 1; padding: 15px 20px; border: none; background: transparent; color: white; outline: none; font-size: 16px; }
+        .search-box button { padding: 0 20px; border: none; background: var(--accent); color: white; cursor: pointer; font-size: 18px; }
+
+        /* Botón GPS Circular */
+        .gps-btn {
+            position: absolute; bottom: 30px; right: 20px; z-index: 1000;
+            width: 60px; height: 60px; border-radius: 50%; border: none;
+            background: var(--accent); color: white; font-size: 26px;
+            box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4); cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: transform 0.2s;
+        }
+        .gps-btn:active { transform: scale(0.9); }
+
+        /* Popups Estilo App */
+        .leaflet-popup-content-wrapper { 
+            background: var(--glass); color: var(--text); 
+            border-radius: 18px; border: 1px solid rgba(255,255,255,0.1);
+            padding: 5px;
+        }
+        .leaflet-popup-tip { background: var(--glass); }
+        .btn-google {
+            display: block; background: var(--accent); color: white; text-align: center;
+            padding: 12px; border-radius: 10px; text-decoration: none; margin-top: 10px;
+            font-weight: bold; font-size: 13px;
+        }
     </style>
 </head>
 <body>
 
-    <div class="search-container">
-        <input type="text" id="addressInput" placeholder="Buscar ciudad o calle...">
-        <button onclick="buscarManual()">🔍</button>
+    <div class="top-ui">
+        <div class="search-box">
+            <input type="text" id="target" placeholder="Buscar dirección o ciudad...">
+            <button onclick="buscarManual()">🔍</button>
+        </div>
     </div>
 
-    <button class="gps-button" onclick="obtenerUbicacion()">🎯</button>
+    <button class="gps-btn" onclick="centrarGPS()">🎯</button>
 
     <div id="map"></div>
 
     <script>
-        // Inicializar el mapa con zoom libre
-        var map = L.map('map', { zoomControl: false }).setView([40.41, -3.70], 6);
+        // 1. Inicialización de Mapa Nocturno (CartoDB Dark)
+        const map = L.map('map', { zoomControl: false, maxZoom: 19 }).setView([40.41, -3.70], 6);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
 
-        // Capa de mapa estándar (la más estable)
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '© OpenStreetMap'
-        }).addTo(map);
-
-        // Definir iconos de PIN (Estilo gota clásico)
-        var iconEstanco = L.icon({
+        // 2. Definición de Iconos PIN (Estilo gota clásico para máxima visibilidad)
+        const iconRed = L.icon({
             iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
             shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
             iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
         });
 
-        var iconBazar = L.icon({
+        const iconGold = L.icon({
             iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-gold.png',
             shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
             iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
         });
 
-        function obtenerUbicacion() {
+        // 3. Función GPS de Alta Precisión
+        function centrarGPS() {
             map.locate({setView: true, maxZoom: 16, enableHighAccuracy: true});
         }
 
-        // Ejecutar ubicación al abrir
-        obtenerUbicacion();
+        centrarGPS(); // Se ejecuta al inicio
 
         map.on('locationfound', function(e) {
-            L.circle(e.latlng, {radius: 15, color: '#2563eb'}).addTo(map);
+            L.circle(e.latlng, { radius: 15, color: '#3b82f6', fillOpacity: 0.1 }).addTo(map);
             cargarPuntos(e.latlng.lat, e.latlng.lng);
         });
 
+        // 4. Carga de Datos y Filtro Anti-Pescaderías
         function cargarPuntos(lat, lng) {
-            // Buscamos Estancos (tobacco) y Bazares (variety_store/convenience)
-            var query = `[out:json];(node["shop"~"tobacco|variety_store|convenience"](around:2500,${lat},${lng});node["amenity"="fuel"](around:2500,${lat},${lng}););out;`;
+            const query = `[out:json];(node["shop"~"tobacco|variety_store|convenience"](around:2500,${lat},${lng});node["amenity"="fuel"](around:2500,${lat},${lng}););out;`;
             
             fetch("https://overpass-api.de/api/interpreter?data=" + encodeURIComponent(query))
-            .then(res => res.json())
-            .then(data => {
+            .then(res => res.json()).then(data => {
                 data.elements.forEach(p => {
-                    var nombre = (p.tags.name || "").toLowerCase();
-                    // Filtro de fruterías/pescaderías
-                    var excluir = ["fruta", "pesca", "verdu", "carni", "baker", "charcu"];
-                    if (excluir.some(palabra => nombre.includes(palabra))) return;
+                    const nombre = (p.tags.name || "").toLowerCase();
+                    
+                    // FILTRO DE SEGURIDAD: Si contiene estas palabras, NO se muestra
+                    const prohibido = ["pesca", "fruta", "verdu", "carni", "baker", "charcu", "panad"];
+                    if (prohibido.some(p => nombre.includes(p))) return;
 
-                    var esEstanco = p.tags.shop === "tobacco";
-                    var markerIcon = esEstanco ? iconEstanco : iconBazar;
-                    var label = esEstanco ? "ESTANCO" : "BAZAR / SUPER";
+                    const esEstanco = p.tags.shop === "tobacco";
+                    const pin = esEstanco ? iconRed : iconGold;
+                    const categoria = esEstanco ? "ESTANCO" : "BAZAR / SUPER";
+                    const colorTexto = esEstanco ? "#ff4d4d" : "#fbbf24";
 
-                    L.marker([p.lat, p.lon], {icon: markerIcon}).addTo(map)
+                    // Crear PIN interactivo
+                    L.marker([p.lat, p.lon], { icon: pin }).addTo(map)
                     .bindPopup(`
-                        <div class="info-box">
-                            <b style="color:${esEstanco ? 'red' : '#b8860b'}">${label}</b><br>
-                            ${p.tags.name || "Sin nombre"}<br>
-                            <a href="https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}" target="_blank" class="btn-link">VER EN GOOGLE</a>
-                        </div>
-                    `);
-                });
-            });
-        }
 
-        function buscarManual() {
-            var input = document.getElementById('addressInput').value;
-            fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + input)
-            .then(r => r.json()).then(data => {
-                if(data.length > 0) {
-                    map.setView([data[0].lat, data[0].lon], 16);
-                    cargarPuntos(data[0].lat, data[0].lon);
-                }
-            });
-        }
-    </script>
-</body>
-</html>
+                        
