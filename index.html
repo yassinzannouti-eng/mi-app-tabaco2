@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vaper Tracker Pro - Filtro Real</title>
+    <title>Vaper Tracker Pro - Estancos y Bazares</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -16,8 +16,8 @@
             position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
             z-index: 1000; width: 85%; max-width: 400px; display: flex; box-shadow: 0 2px 10px rgba(0,0,0,0.2);
         }
-        .search-bar input { flex: 1; padding: 12px; border-radius: 25px 0 0 25px; border: none; outline: none; }
-        .search-bar button { padding: 12px; border-radius: 0 25px 25px 0; border: none; background: #2563eb; color: white; cursor: pointer; }
+        .search-bar input { flex: 1; padding: 12px; border-radius: 25px 0 0 25px; border: 1px solid #ccc; outline: none; }
+        .search-bar button { padding: 12px; border-radius: 0 25px 25px 0; border: 1px solid #ccc; background: #2563eb; color: white; cursor: pointer; }
 
         #sidebar {
             position: absolute; left: -280px; top: 0; width: 260px; height: 100%;
@@ -43,72 +43,62 @@
 
     <div id="sidebar">
         <h3 style="margin-top:0">Captura de Puntos</h3>
-        <p style="font-size:12px; color:#666;">Toca el mapa para anotar coordenadas manualmente.</p>
         <div id="lista-coords"></div>
     </div>
 
     <div id="map"></div>
 
     <script>
-        var map = L.map('map', { zoomControl: false, maxZoom: 20 }).setView([40.41, -3.70], 6);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 20 }).addTo(map);
+        // Inicialización estable
+        var map = L.map('map', { zoomControl: false, maxZoom: 19 }).setView([40.41, -3.70], 6);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
         var iconRed = L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png', iconSize: [25, 41], iconAnchor: [12, 41] });
         var iconGold = L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-gold.png', iconSize: [25, 41], iconAnchor: [12, 41] });
 
-        map.locate({setView: true, zoom: 16});
+        // Ubicación automática al cargar
+        map.locate({setView: true, maxZoom: 16});
 
         map.on('locationfound', function(e) {
             buscarDatos(e.latlng.lat, e.latlng.lng);
         });
 
+        // Captura manual al hacer clic
         map.on('click', function(e) {
             var lat = e.latlng.lat.toFixed(6);
             var lng = e.latlng.lng.toFixed(6);
             var item = document.createElement("div");
             item.className = "cap-item";
-            item.innerHTML = "<b>Coordenadas:</b><br>" + lat + ", " + lng;
+            item.innerHTML = "<b>Punto Guardado:</b><br>" + lat + ", " + lng;
             document.getElementById("lista-coords").prepend(item);
             document.getElementById('sidebar').classList.add('active');
         });
 
         function buscarDatos(lat, lng) {
-            // EXCLUSIÓN DIRECTA EN LA QUERY: No queremos nada que sea greengrocer, seafood, butcher o bakery
-            var query = `[out:json];(
-                node["shop"~"tobacco|variety_store|convenience"]["shop"!~"greengrocer|seafood|butcher|bakery"](around:2500,${lat},${lng});
-                node["amenity"="fuel"](around:2500,${lat},${lng});
-            );out;`;
+            // Simplificamos la query para que no falle. Buscamos Tobacco, Variety y Convenience
+            var query = `[out:json];(node["shop"~"tobacco|variety_store|convenience"](around:2000,${lat},${lng});node["amenity"="fuel"](around:2000,${lat},${lng}););out;`;
             
             fetch("https://overpass-api.de/api/interpreter?data=" + encodeURIComponent(query))
             .then(r => r.json()).then(d => {
                 d.elements.forEach(p => {
                     var nombre = (p.tags.name || "").toLowerCase();
                     
-                    // LISTA NEGRA EXTENDIDA DE PALABRAS PROHIBIDAS
-                    var palabrasProhibidas = [
-                        "pescaderia", "fruteria", "frutas", "carniceria", "pescado", 
-                        "charcuteria", "marisco", "huerta", "verdura", "polleria", 
-                        "panaderia", "pasteleria", "comestibles"
-                    ];
-                    
-                    if (palabrasProhibidas.some(p => nombre.includes(p))) return;
+                    // FILTRO MANUAL RÁPIDO (Elimina pescaderías y fruterías que se cuelen)
+                    var palabrasNo = ["pesca", "fruta", "verdu", "carni", "panad", "baker", "charcu"];
+                    if (palabrasNo.some(word => nombre.includes(word))) return;
 
                     var esEstanco = p.tags.shop === "tobacco";
                     var esGas = p.tags.amenity === "fuel";
-                    var titulo = p.tags.name || (esEstanco ? "Estanco" : (esGas ? "Gasolinera" : "Bazar / Super"));
+                    var titulo = p.tags.name || (esEstanco ? "Estanco" : "Bazar / Super");
                     
-                    var icono = esEstanco ? iconRed : iconGold;
-                    var colorBadge = esEstanco ? '#e11d48' : '#eab308';
-                    var txtBadge = esEstanco ? 'ESTANCO' : (esGas ? 'GASOLINERA' : 'BAZAR / SUPER');
-
                     var gLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(titulo)}+${p.lat},${p.lon}`;
 
-                    L.marker([p.lat, p.lon], {icon: icono}).addTo(map)
+                    L.marker([p.lat, p.lon], {icon: esEstanco ? iconRed : iconGold}).addTo(map)
                     .bindPopup(`
-                        <div style="text-align:center; min-width:150px;">
-                            <span class="badge" style="background:${colorBadge}">${txtBadge}</span>
+                        <div style="text-align:center">
+                            <span class="badge" style="background:${esEstanco ? '#e11d48' : '#eab308'}">${esEstanco ? 'ESTANCO' : 'BAZAR / SUPER'}</span>
                             <h4 style="margin:8px 0">${titulo}</h4>
-                            <a href="${gLink}" target="_blank" class="btn-g">🕒 VER EN GOOGLE</a>
+                            <a href="${gLink}" target="_blank" class="btn-g">VER HORARIO GOOGLE</a>
                         </div>
                     `);
                 });
@@ -120,7 +110,7 @@
             fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + val)
             .then(r => r.json()).then(data => {
                 if(data.length > 0) {
-                    map.setView([data[0].lat, data[0].lon], 17);
+                    map.setView([data[0].lat, data[0].lon], 16);
                     buscarDatos(data[0].lat, data[0].lon);
                 }
             });
