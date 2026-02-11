@@ -1,59 +1,74 @@
-// 1. Inicializamos el mapa centrado en Málaga (El Palo) por defecto
-var map = L.map('map').setView([36.7201, -4.3521], 15);
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mis Estancos Cercanos</title>
 
-// 2. Añadimos la capa visual de OpenStreetMap
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap contributors'
-}).addTo(map);
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-// 3. Icono personalizado para los estancos (Color Rojo)
-var estancoIcon = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41]
-});
+    <style>
+        /* 2. Esto hace que el mapa ocupe toda la pantalla */
+        body, html { margin: 0; padding: 0; height: 100%; }
+        #map { height: 100vh; width: 100%; }
+    </style>
+</head>
+<body>
 
-// 4. Intentamos localizarte (imprescindible para tu trayecto diario)
-map.locate({setView: true, maxZoom: 16});
+    <div id="map"></div>
 
-// 5. FUNCIÓN: Cuando el GPS nos da tu posición
-function onLocationFound(e) {
-    // Marcador azul para ti
-    L.marker(e.latlng).addTo(map)
-        .bindPopup("Estás aquí mismo").openPopup();
+    <script>
+        // 4. CONFIGURACIÓN DEL MAPA
+        // Empezamos centrados en Málaga por si el GPS falla
+        var map = L.map('map').setView([36.7201, -4.3521], 15);
 
-    // Buscamos estancos en un radio de 5km a tu alrededor
-    buscarEstancos(e.latlng.lat, e.latlng.lng);
-}
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
 
-map.on('locationfound', onLocationFound);
+        // Icono rojo para los estancos
+        var estancoIcon = new L.Icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+            popupAnchor: [1, -34],
+            shadowSize: [41, 41]
+        });
 
-// Si el GPS falla o el usuario no da permiso, usamos El Palo por defecto
-map.on('locationerror', function() {
-    console.warn("GPS no disponible. Buscando en El Palo...");
-    buscarEstancos(36.7201, -4.3521); 
-});
+        // 5. BUSCAR TU UBICACIÓN
+        map.locate({setView: true, maxZoom: 16});
 
-// 6. FUNCIÓN: Consulta a la base de datos nacional de OpenStreetMap
-function buscarEstancos(lat, lng) {
-    const radio = 5000; // 5000 metros (5km)
-    
-    // Consulta "Overpass" para buscar solo tiendas de tabaco (tobacco)
-    const query = `[out:json];node["shop"="tobacco"](around:${radio},${lat},${lng});out;`;
-    const url = "https://overpass-api.de/api/interpreter?data=" + encodeURIComponent(query);
+        // Si el navegador te encuentra, hace esto:
+        map.on('locationfound', function(e) {
+            L.marker(e.latlng).addTo(map).bindPopup("Estás aquí").openPopup();
+            buscarEstancos(e.latlng.lat, e.latlng.lng);
+        });
 
-    fetch(url)
-        .then(response => response.json())
-        .then(data => {
-            data.elements.forEach(estanco => {
-                // Creamos el marcador para cada estanco con el icono rojo
-                L.marker([estanco.lat, estanco.lon], {icon: estancoIcon})
-                    .addTo(map)
-                    .bindPopup(`<b>Estanco</b><br>${estanco.tags.name || "Estanco Oficial"}`);
-            });
-        })
-        .catch(error => console.error("Error al cargar datos:", error));
-}
+        // Si el GPS falla, busca en El Palo directamente
+        map.on('locationerror', function() {
+            alert("No pude encontrar tu ubicación. Mostrando El Palo.");
+            buscarEstancos(36.7201, -4.3521);
+        });
+
+        // 6. FUNCIÓN PARA BUSCAR ESTANCOS NACIONALES (pero solo cerca de ti)
+        function buscarEstancos(lat, lng) {
+            const radio = 5000; // Busca a 5km a la redonda
+            const query = `[out:json];node["shop"="tobacco"](around:${radio},${lat},${lng});out;`;
+            const url = "https://overpass-api.de/api/interpreter?data=" + encodeURIComponent(query);
+
+            fetch(url)
+                .then(res => res.json())
+                .then(data => {
+                    data.elements.forEach(estanco => {
+                        L.marker([estanco.lat, estanco.lon], {icon: estancoIcon})
+                            .addTo(map)
+                            .bindPopup(`<b>Estanco</b><br>${estanco.tags.name || "Abierto"}`);
+                    });
+                })
+                .catch(err => console.error("Error:", err));
+        }
+    </script>
+</body>
+</html>
