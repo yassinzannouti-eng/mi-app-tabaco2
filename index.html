@@ -10,11 +10,14 @@ attribution:'© OpenStreetMap'
 const markersLayer = L.layerGroup().addTo(map);
 const searchBtn = document.getElementById("searchCenterButton");
 
-// ================= UI EXTRA =================
+searchBtn.style.display = "none"; // oculto al inicio
+
+// ================= CONTADOR =================
 
 const infoBox = L.control({position:"bottomleft"});
+
 infoBox.onAdd = function(){
-this._div = L.DomUtil.create("div","infoBox");
+this._div = L.DomUtil.create("div");
 this._div.style.background="white";
 this._div.style.padding="8px 12px";
 this._div.style.borderRadius="8px";
@@ -22,14 +25,11 @@ this._div.style.boxShadow="0 2px 6px rgba(0,0,0,.2)";
 this._div.innerHTML="0 resultados";
 return this._div;
 };
+
 infoBox.addTo(map);
 
-function actualizarContador(n){
-infoBox._div.innerHTML = n + " resultados";
-}
-
-function mostrarCargando(mostrar){
-infoBox._div.innerHTML = mostrar ? "Buscando..." : infoBox._div.innerHTML;
+function actualizarContador(texto){
+infoBox._div.innerHTML = texto;
 }
 
 // ================= ICONOS =================
@@ -56,14 +56,13 @@ map.on('locationfound', e=>{
 userLatLng = e.latlng;
 });
 
-// Botón suave
 document.getElementById('locateButton').onclick = ()=>{
 if(userLatLng){
 map.flyTo(userLatLng, 17, {duration:1.2});
 }
 };
 
-// ================= CACHE + CONTROL =================
+// ================= CACHE =================
 
 const cache = {};
 let lastSearchKey = null;
@@ -80,7 +79,7 @@ return 10000;
 function generarKey(){
 const c = map.getCenter();
 const zoom = map.getZoom();
-return `${c.lat.toFixed(3)}_${c.lng.toFixed(3)}_${zoom}`;
+return `${c.lat.toFixed(2)}_${c.lng.toFixed(2)}_${zoom}`;
 }
 
 // ================= BUSCAR =================
@@ -90,23 +89,22 @@ async function buscarDatos(){
 const key = generarKey();
 
 if(key === lastSearchKey){
-return; // evita búsqueda duplicada
+return;
 }
 
 lastSearchKey = key;
 
-const center = map.getCenter();
-const radius = calcularRadio();
-
 markersLayer.clearLayers();
-mostrarCargando(true);
+actualizarContador("Buscando...");
 searchBtn.style.display = "none";
 
-// Si existe en cache
 if(cache[key]){
 pintarResultados(cache[key]);
 return;
 }
+
+const center = map.getCenter();
+const radius = calcularRadio();
 
 const query = `
 [out:json][timeout:25];
@@ -127,7 +125,7 @@ if(!response.ok) throw new Error();
 
 const data = await response.json();
 
-cache[key] = data.elements; // guardar en cache
+cache[key] = data.elements;
 
 pintarResultados(data.elements);
 
@@ -152,17 +150,12 @@ L.marker([p.lat,p.lon],{
 icon: esEstanco?iconEstanco:iconTienda
 })
 .addTo(markersLayer)
-.bindPopup(`
-<b>${nombre}</b><br>
-<a href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}" target="_blank">
-Cómo llegar
-</a>
-`);
+.bindPopup(`<b>${nombre}</b>`);
 
 contador++;
 });
 
-actualizarContador(contador);
+actualizarContador(contador + " resultados");
 }
 
 // ================= BUSCADOR MANUAL =================
@@ -180,6 +173,7 @@ const data = await response.json();
 
 if(data.length){
 map.flyTo([data[0].lat,data[0].lon],16,{duration:1.2});
+buscarDatos(); // IMPORTANTE
 }else{
 alert("No encontrado");
 }
@@ -190,7 +184,7 @@ alert("Error búsqueda");
 
 document.getElementById('searchButton').onclick = buscarManual;
 
-// ================= SISTEMA INTELIGENTE =================
+// ================= MOVIMIENTO =================
 
 let moveTimeout;
 
@@ -208,4 +202,10 @@ buscarDatos();
 
 document.getElementById('searchCenterButton').onclick = buscarDatos;
 
-  </script>
+// ================= PRIMERA BÚSQUEDA AUTOMÁTICA =================
+
+setTimeout(()=>{
+buscarDatos();
+},1500);
+
+</script>
