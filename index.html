@@ -3,117 +3,80 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vaper Tracker Pro - Zoom Libre</title>
+    <title>Vaper Tracker - Ubicación Real</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; font-family: sans-serif; overflow: hidden; }
+        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; }
         #map { height: 100vh; width: 100%; z-index: 1; }
 
-        /* Buscador */
+        /* Buscador Superior */
         .search-bar {
-            position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
-            z-index: 1000; width: 85%; max-width: 400px; display: flex; box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
+            z-index: 1000; width: 90%; max-width: 450px; display: flex; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15); border-radius: 30px; overflow: hidden;
         }
-        .search-bar input { flex: 1; padding: 12px; border-radius: 25px 0 0 25px; border: none; outline: none; }
-        .search-bar button { padding: 12px; border-radius: 0 25px 25px 0; border: none; background: #2563eb; color: white; cursor: pointer; }
+        .search-bar input { flex: 1; padding: 15px 20px; border: none; outline: none; font-size: 16px; }
+        .search-bar button { padding: 15px 20px; border: none; background: #2563eb; color: white; cursor: pointer; font-size: 18px; }
 
-        /* Sidebar */
-        #sidebar {
-            position: absolute; left: -280px; top: 0; width: 260px; height: 100%;
-            background: white; z-index: 2000; transition: 0.3s; padding: 20px;
-            box-shadow: 2px 0 15px rgba(0,0,0,0.3); overflow-y: auto;
+        /* Botón de Mi Ubicación (Prioritario) */
+        .btn-locate {
+            position: absolute; bottom: 100px; right: 20px; z-index: 1000;
+            width: 55px; height: 55px; background: white; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2); border: 2px solid #2563eb; cursor: pointer;
         }
-        #sidebar.active { left: 0; }
-        .btn-menu { position: absolute; left: 10px; top: 70px; z-index: 1500; background: white; border: 1px solid #ccc; padding: 10px; border-radius: 8px; cursor: pointer; font-weight: bold; }
 
-        .cap-item { background: #f1f5f9; padding: 10px; border-radius: 8px; margin-bottom: 10px; border-left: 5px solid #2563eb; font-size: 11px; }
-        .badge { font-size: 10px; padding: 3px 8px; border-radius: 4px; color: white; font-weight: bold; text-transform: uppercase; }
-        .btn-g { display: block; background: #4285F4; color: white; text-align: center; padding: 10px; text-decoration: none; border-radius: 8px; margin-top: 10px; font-weight: bold; font-size: 12px; }
+        /* Botón Añadir Punto (Secundario - Izquierda) */
+        .btn-add-manual {
+            position: absolute; bottom: 30px; left: 20px; z-index: 1000;
+            background: rgba(255, 255, 255, 0.9); border: 1px solid #ccc; padding: 8px 15px;
+            border-radius: 20px; font-size: 12px; font-weight: bold; cursor: pointer; color: #444;
+        }
+
+        /* Popups y Etiquetas */
+        .leaflet-popup-content-wrapper { border-radius: 12px; padding: 5px; }
+        .badge { display: inline-block; padding: 4px 10px; border-radius: 6px; color: white; font-weight: bold; font-size: 11px; margin-bottom: 5px; }
+        .btn-g { display: block; background: #4285F4; color: white; text-align: center; padding: 12px; 
+                 text-decoration: none; border-radius: 8px; margin-top: 10px; font-weight: bold; font-size: 14px; }
+
+        /* Punto de mira central discreto */
+        .center-cross {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            z-index: 900; pointer-events: none; color: #2563eb; opacity: 0.5; font-size: 20px;
+        }
     </style>
 </head>
 <body>
 
     <div class="search-bar">
-        <input type="text" id="address" placeholder="Buscar ciudad o calle...">
+        <input type="text" id="address" placeholder="Buscar zona o ciudad...">
         <button onclick="buscarManual()">🔍</button>
     </div>
 
-    <button class="btn-menu" onclick="document.getElementById('sidebar').classList.toggle('active')">📋 PUNTOS BOE</button>
+    <div class="center-cross">+</div>
 
-    <div id="sidebar">
-        <h3 style="margin-top:0">Captura de Puntos</h3>
-        <p style="font-size:12px; color:#666;">Toca el mapa para anotar coordenadas manualmente.</p>
-        <div id="lista-coords"></div>
-        <button onclick="document.getElementById('sidebar').classList.remove('active')" style="width:100%; padding:10px; margin-top:10px;">Cerrar</button>
-    </div>
+    <div class="btn-locate" onclick="map.locate({setView: true, zoom: 17})">🎯</div>
+
+    <button class="btn-add-manual" onclick="capturarCentro()">➕ GUARDAR COORDENADA</button>
 
     <div id="map"></div>
 
     <script>
-        // Zoom máximo aumentado a 19 para permitir ver calles al detalle
+        // Inicialización del mapa enfocado en accesibilidad visual
         var map = L.map('map', { zoomControl: false, maxZoom: 19 }).setView([40.41, -3.70], 6);
         
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
             maxZoom: 19,
-            attribution: 'OSM'
+            attribution: '©OpenStreetMap'
         }).addTo(map);
 
-        var iconRed = L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png', iconSize: [25, 41], iconAnchor: [12, 41] });
-        var iconGold = L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-gold.png', iconSize: [25, 41], iconAnchor: [12, 41] });
+        // Iconos más grandes y llamativos
+        var iconEstanco = L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [30, 50], iconAnchor: [15, 50], popupAnchor: [1, -34], shadowSize: [50, 50] });
+        var iconTienda = L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-gold.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [30, 50], iconAnchor: [15, 50], popupAnchor: [1, -34], shadowSize: [50, 50] });
 
-        // UBICACIÓN INICIAL
-        map.locate({setView: true, zoom: 16}); // Centra al inicio con un zoom cómodo
-
-        map.on('locationfound', function(e) {
-            buscarDatos(e.latlng.lat, e.latlng.lng);
-        });
-
-        // CAPTURA AL TOCAR EL MAPA
-        map.on('click', function(e) {
-            var lat = e.latlng.lat.toFixed(6);
-            var lng = e.latlng.lng.toFixed(6);
-            var item = document.createElement("div");
-            item.className = "cap-item";
-            item.innerHTML = "<b>Coordenadas:</b><br>" + lat + ", " + lng;
-            document.getElementById("lista-coords").prepend(item);
-            document.getElementById('sidebar').classList.add('active');
-        });
-
-        function buscarDatos(lat, lng) {
-            var query = `[out:json];(node["shop"="tobacco"](around:3000,${lat},${lng});node["shop"~"variety_store|convenience|supermarket"](around:3000,${lat},${lng}););out;`;
-            
-            fetch("https://overpass-api.de/api/interpreter?data=" + encodeURIComponent(query))
-            .then(r => r.json()).then(d => {
-                d.elements.forEach(p => {
-                    var esEstanco = p.tags.shop === "tobacco";
-                    var nombre = p.tags.name || (esEstanco ? "Estanco" : "Bazar / Supermercado");
-                    var gLink = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(nombre + " " + p.lat + "," + p.lon);
-
-                    L.marker([p.lat, p.lon], {icon: esEstanco ? iconRed : iconGold}).addTo(map)
-                    .bindPopup(`
-                        <div style="text-align:center; min-width:150px;">
-                            <span class="badge" style="background:${esEstanco ? '#e11d48' : '#eab308'}">${esEstanco ? 'ESTANCO' : 'BAZAR / SUPER'}</span>
-                            <h4 style="margin:8px 0">${nombre}</h4>
-                            <a href="${gLink}" target="_blank" class="btn-g">VER EN GOOGLE</a>
-                        </div>
-                    `);
-                });
-            });
-        }
-
-        function buscarManual() {
-            var val = document.getElementById('address').value;
-            fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + val)
-            .then(r => r.json()).then(data => {
-                if(data.length > 0) {
-                    map.setView([data[0].lat, data[0].lon], 17);
-                    buscarDatos(data[0].lat, data[0].lon);
-                }
-            });
-        }
-    </script>
-</body>
-</html>
+        // MARCADOR DE POSICIÓN DEL USUARIO
+        var userMarker = L.circleMarker([0,0], { radius: 10, color: 'white', fillColor: '#2563eb', fillOpacity: 1, weight: 3 }).addTo(map);
+        
