@@ -1,211 +1,42 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mapa estable</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+<style>
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+#map {
+  height: 100%;
+  width: 100%;
+}
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
 <script>
+document.addEventListener("DOMContentLoaded", function() {
 
-const map = L.map('map', { zoomControl:false }).setView([40.41,-3.70],6);
+  const map = L.map('map').setView([40.41, -3.70], 6);
 
-L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{
-maxZoom:19,
-attribution:'© OpenStreetMap'
-}).addTo(map);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '© OpenStreetMap'
+  }).addTo(map);
 
-const markersLayer = L.layerGroup().addTo(map);
-const searchBtn = document.getElementById("searchCenterButton");
-
-searchBtn.style.display = "none"; // oculto al inicio
-
-// ================= CONTADOR =================
-
-const infoBox = L.control({position:"bottomleft"});
-
-infoBox.onAdd = function(){
-this._div = L.DomUtil.create("div");
-this._div.style.background="white";
-this._div.style.padding="8px 12px";
-this._div.style.borderRadius="8px";
-this._div.style.boxShadow="0 2px 6px rgba(0,0,0,.2)";
-this._div.innerHTML="0 resultados";
-return this._div;
-};
-
-infoBox.addTo(map);
-
-function actualizarContador(texto){
-infoBox._div.innerHTML = texto;
-}
-
-// ================= ICONOS =================
-
-const iconEstanco = L.icon({
-iconUrl:'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-shadowUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-iconSize:[30,50], iconAnchor:[15,50]
 });
-
-const iconTienda = L.icon({
-iconUrl:'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-gold.png',
-shadowUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-iconSize:[30,50], iconAnchor:[15,50]
-});
-
-// ================= USUARIO =================
-
-let userLatLng = null;
-
-map.locate();
-
-map.on('locationfound', e=>{
-userLatLng = e.latlng;
-});
-
-document.getElementById('locateButton').onclick = ()=>{
-if(userLatLng){
-map.flyTo(userLatLng, 17, {duration:1.2});
-}
-};
-
-// ================= CACHE =================
-
-const cache = {};
-let lastSearchKey = null;
-
-function calcularRadio(){
-const zoom = map.getZoom();
-if(zoom >= 17) return 800;
-if(zoom >= 15) return 1500;
-if(zoom >= 13) return 3000;
-if(zoom >= 11) return 6000;
-return 10000;
-}
-
-function generarKey(){
-const c = map.getCenter();
-const zoom = map.getZoom();
-return `${c.lat.toFixed(2)}_${c.lng.toFixed(2)}_${zoom}`;
-}
-
-// ================= BUSCAR =================
-
-async function buscarDatos(){
-
-const key = generarKey();
-
-if(key === lastSearchKey){
-return;
-}
-
-lastSearchKey = key;
-
-markersLayer.clearLayers();
-actualizarContador("Buscando...");
-searchBtn.style.display = "none";
-
-if(cache[key]){
-pintarResultados(cache[key]);
-return;
-}
-
-const center = map.getCenter();
-const radius = calcularRadio();
-
-const query = `
-[out:json][timeout:25];
-(
-node["shop"="tobacco"](around:${radius},${center.lat},${center.lng});
-node["shop"~"convenience|variety_store|supermarket"](around:${radius},${center.lat},${center.lng});
-);
-out;
-`;
-
-try{
-const response = await fetch("https://overpass-api.de/api/interpreter",{
-method:"POST",
-body: query
-});
-
-if(!response.ok) throw new Error();
-
-const data = await response.json();
-
-cache[key] = data.elements;
-
-pintarResultados(data.elements);
-
-}catch(e){
-actualizarContador("Error servidor");
-}
-}
-
-function pintarResultados(elements){
-
-markersLayer.clearLayers();
-
-let contador = 0;
-
-elements.forEach(p=>{
-if(!p.lat || !p.lon) return;
-
-const esEstanco = p.tags?.shop==="tobacco";
-const nombre = p.tags?.name || (esEstanco?"ESTANCO":"TIENDA");
-
-L.marker([p.lat,p.lon],{
-icon: esEstanco?iconEstanco:iconTienda
-})
-.addTo(markersLayer)
-.bindPopup(`<b>${nombre}</b>`);
-
-contador++;
-});
-
-actualizarContador(contador + " resultados");
-}
-
-// ================= BUSCADOR MANUAL =================
-
-async function buscarManual(){
-const val = document.getElementById('address').value;
-if(!val) return;
-
-try{
-const response = await fetch(
-'https://nominatim.openstreetmap.org/search?format=json&q='+encodeURIComponent(val)
-);
-
-const data = await response.json();
-
-if(data.length){
-map.flyTo([data[0].lat,data[0].lon],16,{duration:1.2});
-buscarDatos(); // IMPORTANTE
-}else{
-alert("No encontrado");
-}
-}catch(e){
-alert("Error búsqueda");
-}
-}
-
-document.getElementById('searchButton').onclick = buscarManual;
-
-// ================= MOVIMIENTO =================
-
-let moveTimeout;
-
-map.on("movestart", ()=>{
-searchBtn.style.display = "block";
-});
-
-map.on("moveend", ()=>{
-clearTimeout(moveTimeout);
-
-moveTimeout = setTimeout(()=>{
-buscarDatos();
-},1000);
-});
-
-document.getElementById('searchCenterButton').onclick = buscarDatos;
-
-// ================= PRIMERA BÚSQUEDA AUTOMÁTICA =================
-
-setTimeout(()=>{
-buscarDatos();
-},1500);
-
 </script>
+
+</body>
+</html>
