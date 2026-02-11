@@ -1,59 +1,8 @@
-function buscarDatos(lat, lng) {
-
-    var query = `[out:json];
-    (
-      node["shop"~"tobacco|variety_store|convenience"](around:2500,${lat},${lng});
-      node["amenity"="fuel"](around:2500,${lat},${lng});
-    );
-    out;`;
-
-    fetch("https://overpass-api.de/api/interpreter?data=" + encodeURIComponent(query))
-    .then(r => r.json())
-    .then(d => {
-
-        d.elements.forEach(p => {
-
-            if (!p.tags) return;
-
-            var nombre = (p.tags.name || "").toLowerCase();
-            var shopType = p.tags.shop || "";
-
-            // 🔴 FILTRO CORREGIDO REAL
-            if (
-                shopType === "greengrocer" ||
-                shopType === "fishmonger" ||
-                shopType === "seafood" ||
-                shopType === "butcher" ||
-                nombre.includes("fruter") ||
-                nombre.includes("pescader") ||
-                nombre.includes("carnicer") ||
-                nombre.includes("charcuter")
-            ) {
-                return;
-            }
-
-            var esEstanco = shopType === "tobacco";
-            var esGas = p.tags.amenity === "fuel";
-
-            var titulo = p.tags.name || (esEstanco ? "Estanco" : (esGas ? "Gasolinera" : "Bazar / Super"));
-
-            var icono = esEstanco ? iconRed : iconGold;
-            var colorBadge = esEstanco ? '#e11d48' : '#eab308';
-            var txtBadge = esEstanco ? 'ESTANCO' : (esGas ? 'GASOLINERA' : 'BAZAR / SUPER');
-
-            var gLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(titulo)}+${p.lat},${p.lon}`;
-
-            L.marker([p.lat, p.lon], {icon: icono}).addTo(map)
-            .bindPopup(`
-                <div style="text-align:center; min-width:150px;">
-                    <span class="badge" style="background:${colorBadge}">${txtBadge}</span>
-                    <h4 style="margin:8px 0">${titulo}</h4>
-                    <a href="${gLink}" target="_blank" class="btn-g">🕒 VER EN GOOGLE</a>
-                </div>
-            `);
-
-        });
-
-    })
-    .catch(err => console.log("Overpass error:", err));
-}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vaper Tracker Pro - Filtro Preciso</title>
+    
+    <link rel="stylesheet" href="https://
