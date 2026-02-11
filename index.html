@@ -3,170 +3,162 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vaper Tracker Pro - Night Edition</title>
+    <title>Vaper Tracker Pro - Visual Focus</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <style>
         :root {
-            --bg-dark: #0f172a;
-            --panel-bg: rgba(30, 41, 59, 0.85);
+            --bg-dark: #0a0f1d;
+            --glass: rgba(26, 32, 53, 0.85);
             --accent: #3b82f6;
-            --gold: #fbbf24;
-            --red: #ef4444;
-            --text: #f1f5f9;
+            --red-glow: #ff4d4d;
+            --gold-glow: #ffd700;
         }
 
-        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Segoe UI', Roboto, sans-serif; background: var(--bg-dark); overflow: hidden; }
+        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg-dark); }
         #map { height: 100vh; width: 100%; background: var(--bg-dark); }
 
-        /* Interfaz Suavizada */
-        .ui-overlay {
-            position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
-            z-index: 1000; width: 90%; max-width: 420px;
+        /* Buscador Superior Suavizado */
+        .top-ui {
+            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+            z-index: 1000; width: 85%; max-width: 420px;
         }
-
-        .search-box {
-            display: flex; background: var(--panel-bg); backdrop-filter: blur(12px);
-            border-radius: 16px; border: 1px solid rgba(255,255,255,0.1);
-            box-shadow: 0 10px 25px rgba(0,0,0,0.4); overflow: hidden;
+        .search-container {
+            display: flex; background: var(--glass); backdrop-filter: blur(12px);
+            border-radius: 20px; border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 15px 35px rgba(0,0,0,0.5); overflow: hidden;
         }
+        .search-container input { flex: 1; padding: 15px 20px; border: none; background: transparent; color: white; outline: none; font-size: 15px; }
+        .search-container button { padding: 15px 20px; border: none; background: var(--accent); color: white; cursor: pointer; transition: 0.3s; }
 
-        .search-box input {
-            flex: 1; padding: 14px 20px; border: none; outline: none;
-            background: transparent; color: var(--text); font-size: 15px;
+        /* Botones Flotantes (FABS) */
+        .side-controls {
+            position: absolute; bottom: 30px; right: 20px;
+            z-index: 1000; display: flex; flex-direction: column; gap: 15px;
         }
-
-        .search-box button {
-            padding: 0 20px; border: none; background: var(--accent); color: white;
-            cursor: pointer; transition: 0.3s;
+        .fab {
+            width: 60px; height: 60px; border-radius: 20px; border: none;
+            background: var(--glass); backdrop-filter: blur(10px); color: white;
+            font-size: 24px; cursor: pointer; border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.4); transition: 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            display: flex; align-items: center; justify-content: center;
         }
+        .fab:active { transform: scale(0.9); }
+        .fab.active { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 20px var(--accent); }
 
-        /* Sidebar con bordes suaves */
+        /* Sidebar con bordes extra suaves */
         #sidebar {
-            position: absolute; left: -300px; top: 0; width: 280px; height: 100%;
-            background: var(--panel-bg); backdrop-filter: blur(15px); z-index: 2000;
-            transition: 0.4s cubic-bezier(0.4, 0, 0.2, 1); padding: 25px;
-            color: var(--text); border-right: 1px solid rgba(255,255,255,0.1);
-            box-shadow: 10px 0 30px rgba(0,0,0,0.5);
+            position: absolute; left: -320px; top: 0; width: 280px; height: 100%;
+            background: var(--glass); backdrop-filter: blur(20px); z-index: 2000;
+            transition: 0.4s ease; padding: 30px; color: white;
+            border-right: 1px solid rgba(255,255,255,0.1); box-shadow: 15px 0 40px rgba(0,0,0,0.6);
         }
         #sidebar.active { left: 0; }
+        .coord-card { background: rgba(255,255,255,0.05); padding: 15px; border-radius: 15px; margin-top: 15px; border-left: 4px solid var(--accent); }
 
-        /* Botones Flotantes */
-        .fab-container { position: absolute; bottom: 30px; right: 20px; z-index: 1500; display: flex; flex-direction: column; gap: 12px; }
-        
-        .fab {
-            width: 56px; height: 56px; border-radius: 18px; border: none;
-            background: var(--panel-bg); color: var(--text); font-size: 24px;
-            cursor: pointer; box-shadow: 0 8px 16px rgba(0,0,0,0.3);
-            backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1);
-            transition: 0.3s; display: flex; align-items: center; justify-content: center;
-        }
-        .fab.active { background: var(--accent); color: white; border-color: var(--accent); }
-        .fab:active { transform: scale(0.95); }
-
-        .coord-item {
-            background: rgba(255,255,255,0.05); padding: 12px; border-radius: 12px;
-            margin-bottom: 10px; border-left: 4px solid var(--accent); font-size: 12px;
-        }
-
-        /* Popups Estilo Nocturno */
-        .leaflet-popup-content-wrapper { background: var(--panel-bg); color: var(--text); border-radius: 16px; border: 1px solid rgba(255,255,255,0.1); }
-        .leaflet-popup-tip { background: var(--panel-bg); }
+        /* Popups Estilo App */
+        .leaflet-popup-content-wrapper { background: #1a2035; color: white; border-radius: 20px; padding: 5px; }
+        .leaflet-popup-tip { background: #1a2035; }
         .btn-google {
             display: block; background: var(--accent); color: white; text-align: center;
-            padding: 10px; border-radius: 10px; text-decoration: none; margin-top: 10px; font-weight: bold;
+            padding: 12px; border-radius: 12px; text-decoration: none; margin-top: 10px;
+            font-weight: bold; font-size: 13px;
         }
     </style>
 </head>
 <body>
 
-    <div class="ui-overlay">
-        <div class="search-box">
-            <input type="text" id="target" placeholder="Buscar zona...">
+    <div class="top-ui">
+        <div class="search-container">
+            <input type="text" id="searchInput" placeholder="Buscar ubicación...">
             <button onclick="buscarManual()">🔍</button>
         </div>
     </div>
 
     <div id="sidebar">
-        <h2 style="color: var(--accent)">Captura BOE</h2>
-        <p style="font-size: 13px; opacity: 0.7;">Activa el modo edición (📝) y toca el mapa para guardar puntos.</p>
-        <div id="lista-coords"></div>
-        <button onclick="document.getElementById('sidebar').classList.remove('active')" style="margin-top:20px; background:none; border:1px solid #444; color:white; padding:8px; border-radius:8px; width:100%;">Cerrar</button>
+        <h2 style="margin-top:0; color:var(--accent);">Puntos BOE</h2>
+        <p style="font-size:13px; opacity:0.6;">Activa el modo (📝) para capturar.</p>
+        <div id="listaCoords"></div>
+        <button onclick="document.getElementById('sidebar').classList.remove('active')" style="margin-top:30px; width:100%; padding:10px; border-radius:10px; border:1px solid #444; background:transparent; color:white; cursor:pointer;">Cerrar panel</button>
     </div>
 
-    <div class="fab-container">
-        <button class="fab" id="editBtn" onclick="toggleEditMode()" title="Modo Edición">📝</button>
-        <button class="fab" onclick="geolocalizar()" title="Mi ubicación">🎯</button>
+    <div class="side-controls">
+        <button class="fab" id="gpsBtn" onclick="centrarGPS()" title="Centrar GPS">🎯</button>
+        <button class="fab" id="editBtn" onclick="toggleEditMode()" title="Modo Captura">📝</button>
     </div>
 
     <div id="map"></div>
 
     <script>
-        let editMode = false;
+        let isEditMode = false;
         
-        // 1. Mapa Nocturno (CartoDB Dark Matter)
-        var map = L.map('map', { zoomControl: false, maxZoom: 20 }).setView([40.41, -3.70], 6);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-            attribution: '© CartoDB'
-        }).addTo(map);
+        // 1. Inicializar Mapa Nocturno
+        const map = L.map('map', { zoomControl: false, maxZoom: 20 }).setView([40.41, -3.7], 6);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
 
-        function toggleEditMode() {
-            editMode = !editMode;
-            const btn = document.getElementById('editBtn');
-            btn.classList.toggle('active');
-            if(editMode) {
-                alert("Modo Edición: Toca el mapa para capturar coordenadas.");
-            }
-        }
-
-        function geolocalizar() {
+        // 2. Función de Centrado GPS Profesional
+        function centrarGPS() {
             map.locate({ setView: true, maxZoom: 17, enableHighAccuracy: true });
         }
 
-        geolocalizar();
+        centrarGPS(); // Centrar al inicio
 
         map.on('locationfound', (e) => {
-            L.circle(e.latlng, { radius: 20, color: '#3b82f6', fillOpacity: 0.2 }).addTo(map);
-            cargarPuntos(e.latlng.lat, e.latlng.lng);
+            // Círculo de posición de usuario suavizado
+            L.circle(e.latlng, { radius: 20, color: '#3b82f6', weight: 1, fillOpacity: 0.15 }).addTo(map);
+            fetchData(e.latlng.lat, e.latlng.lng);
         });
 
-        // Captura SOLO si editMode está activo
+        // 3. Lógica de Captura (Solo si el modo edición está ON)
+        function toggleEditMode() {
+            isEditMode = !isEditMode;
+            document.getElementById('editBtn').classList.toggle('active');
+            if(isEditMode) alert("Modo Captura activado: Toca el mapa para guardar coordenadas.");
+        }
+
         map.on('click', (e) => {
-            if(!editMode) return;
-            
+            if (!isEditMode) return;
             const lat = e.latlng.lat.toFixed(6);
             const lng = e.latlng.lng.toFixed(6);
-            const div = document.createElement("div");
-            div.className = "coord-item";
-            div.innerHTML = `<b>Coordenada:</b><br>${lat}, ${lng}`;
-            document.getElementById("lista-coords").prepend(div);
+            const card = document.createElement("div");
+            card.className = "coord-card";
+            card.innerHTML = `<b>Localización BOE</b><br><small>${lat}, ${lng}</small>`;
+            document.getElementById("listaCoords").prepend(card);
             document.getElementById('sidebar').classList.add('active');
         });
 
-        function cargarPuntos(lat, lng) {
-            // Filtro de Tobacco y Variety/Convenience (Bazares)
+        // 4. Carga de Locales con Prioridad Visual
+        function fetchData(lat, lng) {
             const query = `[out:json];(node["shop"~"tobacco|variety_store|convenience"](around:2500,${lat},${lng});node["amenity"="fuel"](around:2500,${lat},${lng}););out;`;
             
             fetch("https://overpass-api.de/api/interpreter?data=" + encodeURIComponent(query))
-            .then(res => res.json()).then(data => {
+            .then(r => r.json()).then(data => {
                 data.elements.forEach(p => {
                     const name = (p.tags.name || "").toLowerCase();
-                    const prohibido = ["pesca", "fruta", "verdu", "carni", "baker", "charcu", "panad"];
-                    if (prohibido.some(word => name.includes(word))) return;
+                    // Filtro de exclusión total de fruterías/pescaderías
+                    const filter = ["pesca", "fruta", "verdu", "carni", "baker", "charcu", "panad"];
+                    if (filter.some(w => name.includes(w))) return;
 
                     const esEstanco = p.tags.shop === "tobacco";
-                    const color = esEstanco ? "#ef4444" : "#fbbf24";
-                    const titulo = p.tags.name || (esEstanco ? "Estanco" : "Bazar / Supermercado");
+                    const color = esEstanco ? "#ff4d4d" : "#ffd700";
 
-                    L.circleMarker([p.lat, p.lon], {
-                        radius: 10, fillColor: color, color: "#fff", weight: 1, fillOpacity: 0.9
-                    }).addTo(map).bindPopup(`
-                        <div style="text-align:center">
-                            <b style="color:${color}">${esEstanco ? 'ESTANCO' : 'BAZAR / SUPER'}</b>
-                            <div style="margin:5px 0">${titulo}</div>
-                            <a href="https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}" target="_blank" class="btn-google">ABRIR EN GOOGLE</a>
+                    // Crear marcador interactivo
+                    const marker = L.circleMarker([p.lat, p.lon], {
+                        radius: 11,
+                        fillColor: color,
+                        color: "#fff",
+                        weight: 2,
+                        fillOpacity: 0.9,
+                        interactive: true // Esto da prioridad al toque sobre el mapa
+                    }).addTo(map);
+
+                    marker.bindPopup(`
+                        <div style="text-align:center; padding:5px;">
+                            <b style="color:${color}; font-size:14px;">${esEstanco ? 'ESTANCO' : 'BAZAR / SUPER'}</b>
+                            <div style="margin:8px 0; font-size:13px;">${p.tags.name || 'Local sin nombre'}</div>
+                            <a href="https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}" target="_blank" class="btn-google">ABRIR GOOGLE MAPS</a>
                         </div>
                     `);
                 });
@@ -174,12 +166,12 @@
         }
 
         function buscarManual() {
-            const val = document.getElementById('target').value;
+            const val = document.getElementById('searchInput').value;
             fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${val}`)
             .then(r => r.json()).then(d => {
                 if(d[0]) {
                     map.setView([d[0].lat, d[0].lon], 17);
-                    cargarPuntos(d[0].lat, d[0].lon);
+                    fetchData(d[0].lat, d[0].lon);
                 }
             });
         }
