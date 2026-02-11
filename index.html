@@ -3,99 +3,108 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vaper Tracker - GPS Fix</title>
+    <title>Vaper Tracker Pro - Filtro Preciso</title>
+    
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; font-family: sans-serif; }
-        #map { height: 100vh; width: 100%; }
-        
-        /* Botón de re-localización visual */
-        .gps-status {
-            position: absolute; top: 70px; right: 10px; z-index: 1000;
-            background: white; padding: 10px; border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.3); cursor: pointer;
-            font-weight: bold; font-size: 12px; border: 2px solid #2563eb;
-        }
+        body, html { margin: 0; padding: 0; height: 100%; font-family: sans-serif; overflow: hidden; }
+        #map { height: 100vh; width: 100%; z-index: 1; }
 
         .search-bar {
             position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
-            z-index: 1000; width: 85%; max-width: 400px; display: flex;
+            z-index: 1000; width: 85%; max-width: 400px; display: flex; box-shadow: 0 2px 10px rgba(0,0,0,0.2);
         }
-        .search-bar input { flex: 1; padding: 12px; border-radius: 25px 0 0 25px; border: 1px solid #ccc; }
-        .search-bar button { padding: 12px; border-radius: 0 25px 25px 0; border: 1px solid #ccc; background: #2563eb; color: white; cursor: pointer; }
+        .search-bar input { flex: 1; padding: 12px; border-radius: 25px 0 0 25px; border: none; outline: none; }
+        .search-bar button { padding: 12px; border-radius: 0 25px 25px 0; border: none; background: #2563eb; color: white; cursor: pointer; }
 
+        #sidebar {
+            position: absolute; left: -280px; top: 0; width: 260px; height: 100%;
+            background: white; z-index: 2000; transition: 0.3s; padding: 20px;
+            box-shadow: 2px 0 15px rgba(0,0,0,0.3); overflow-y: auto;
+        }
+        #sidebar.active { left: 0; }
+        .btn-menu { position: absolute; left: 10px; top: 70px; z-index: 1500; background: white; border: 1px solid #ccc; padding: 10px; border-radius: 8px; cursor: pointer; font-weight: bold; }
+
+        .cap-item { background: #f1f5f9; padding: 10px; border-radius: 8px; margin-bottom: 10px; border-left: 5px solid #2563eb; font-size: 11px; }
         .badge { font-size: 10px; padding: 3px 8px; border-radius: 4px; color: white; font-weight: bold; text-transform: uppercase; }
+        .btn-g { display: block; background: #4285F4; color: white; text-align: center; padding: 10px; text-decoration: none; border-radius: 8px; margin-top: 10px; font-weight: bold; font-size: 12px; }
     </style>
 </head>
 <body>
 
     <div class="search-bar">
-        <input type="text" id="address" placeholder="Buscar otra zona...">
+        <input type="text" id="address" placeholder="Buscar ciudad o calle...">
         <button onclick="buscarManual()">🔍</button>
     </div>
 
-    <div class="gps-status" onclick="obtenerUbicacionReal()">🎯 MI UBICACIÓN</div>
+    <button class="btn-menu" onclick="document.getElementById('sidebar').classList.toggle('active')">📋 PUNTOS BOE</button>
+
+    <div id="sidebar">
+        <h3 style="margin-top:0">Captura de Puntos</h3>
+        <p style="font-size:12px; color:#666;">Toca el mapa para anotar coordenadas manualmente.</p>
+        <div id="lista-coords"></div>
+    </div>
 
     <div id="map"></div>
 
     <script>
-        // Inicialización base
-        var map = L.map('map', { zoomControl: false }).setView([40.41, -3.70], 6);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        // Zoom máximo total para poder ampliar sin límites
+        var map = L.map('map', { zoomControl: false, maxZoom: 20 }).setView([40.41, -3.70], 6);
+        
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 20 }).addTo(map);
 
         var iconRed = L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png', iconSize: [25, 41], iconAnchor: [12, 41] });
         var iconGold = L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-gold.png', iconSize: [25, 41], iconAnchor: [12, 41] });
 
-        // --- FUNCIÓN DE UBICACIÓN REFORZADA ---
-        function obtenerUbicacionReal() {
-            if (!navigator.geolocation) {
-                alert("Tu navegador no soporta GPS");
-                return;
-            }
+        // GEOLOCALIZACIÓN AL INICIO
+        map.locate({setView: true, zoom: 16});
 
-            const opciones = {
-                enableHighAccuracy: true, // Máxima precisión
-                timeout: 10000,           // Espera hasta 10 seg
-                maximumAge: 0             // No usar caché
-            };
+        map.on('locationfound', function(e) {
+            buscarDatos(e.latlng.lat, e.latlng.lng);
+        });
 
-            navigator.geolocation.getCurrentPosition(
-                (pos) => {
-                    const lat = pos.coords.latitude;
-                    const lng = pos.coords.longitude;
-                    map.setView([lat, lng], 15);
-                    L.marker([lat, lng]).addTo(map).bindPopup("Estás aquí").openPopup();
-                    buscarDatos(lat, lng);
-                },
-                (err) => {
-                    console.warn(`Error GPS (${err.code}): ${err.message}`);
-                    alert("Por favor, activa el GPS del móvil y permite el acceso.");
-                },
-                opciones
-            );
-        }
-
-        // Ejecutar al cargar
-        window.onload = obtenerUbicacionReal;
+        // CAPTURA AL TOCAR EL MAPA
+        map.on('click', function(e) {
+            var lat = e.latlng.lat.toFixed(6);
+            var lng = e.latlng.lng.toFixed(6);
+            var item = document.createElement("div");
+            item.className = "cap-item";
+            item.innerHTML = "<b>Coordenadas:</b><br>" + lat + ", " + lng;
+            document.getElementById("lista-coords").prepend(item);
+            document.getElementById('sidebar').classList.add('active');
+        });
 
         function buscarDatos(lat, lng) {
-            // Limpiar marcadores previos si fuera necesario (opcional)
-            var query = `[out:json];(node["shop"="tobacco"](around:3000,${lat},${lng});node["shop"~"variety_store|convenience|supermarket"](around:3000,${lat},${lng}););out;`;
+            // Filtramos variedad de tiendas, conveniencia y gasolineras
+            var query = `[out:json];(node["shop"~"tobacco|variety_store|convenience"](around:2500,${lat},${lng});node["amenity"="fuel"](around:2500,${lat},${lng}););out;`;
             
             fetch("https://overpass-api.de/api/interpreter?data=" + encodeURIComponent(query))
             .then(r => r.json()).then(d => {
                 d.elements.forEach(p => {
-                    var esEstanco = p.tags.shop === "tobacco";
-                    var nombre = p.tags.name || (esEstanco ? "Estanco" : "Bazar / Supermercado");
-                    var gLink = "https://www.google.com/maps/search/" + encodeURIComponent(nombre + " " + p.lat + "," + p.lon);
+                    var nombre = (p.tags.name || "").toLowerCase();
+                    
+                    // FILTRO DE EXCLUSIÓN: Si el nombre contiene palabras de comida fresca, lo saltamos
+                    var excluir = ["pescaderia", "fruteria", "frutas", "carniceria", "pescado", "charcuteria"];
+                    if (excluir.some(palabra => nombre.includes(palabra))) return;
 
-                    L.marker([p.lat, p.lon], {icon: esEstanco ? iconRed : iconGold}).addTo(map)
+                    var esEstanco = p.tags.shop === "tobacco";
+                    var esGas = p.tags.amenity === "fuel";
+                    var titulo = p.tags.name || (esEstanco ? "Estanco" : (esGas ? "Gasolinera" : "Bazar / Super"));
+                    
+                    var icono = esEstanco ? iconRed : iconGold;
+                    var colorBadge = esEstanco ? '#e11d48' : '#eab308';
+                    var txtBadge = esEstanco ? 'ESTANCO' : (esGas ? 'GASOLINERA' : 'BAZAR / SUPER');
+
+                    var gLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(titulo)}+${p.lat},${p.lon}`;
+
+                    L.marker([p.lat, p.lon], {icon: icono}).addTo(map)
                     .bindPopup(`
-                        <div style="text-align:center">
-                            <span class="badge" style="background:${esEstanco ? '#e11d48' : '#eab308'}">${esEstanco ? 'ESTANCO' : 'BAZAR / SUPER'}</span>
-                            <h4 style="margin:8px 0">${nombre}</h4>
-                            <a href="${gLink}" target="_blank" style="display:block; background:#4285F4; color:white; padding:8px; text-decoration:none; border-radius:5px;">VER EN GOOGLE</a>
+                        <div style="text-align:center; min-width:150px;">
+                            <span class="badge" style="background:${colorBadge}">${txtBadge}</span>
+                            <h4 style="margin:8px 0">${titulo}</h4>
+                            <a href="${gLink}" target="_blank" class="btn-g">🕒 VER EN GOOGLE</a>
                         </div>
                     `);
                 });
@@ -107,7 +116,7 @@
             fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + val)
             .then(r => r.json()).then(data => {
                 if(data.length > 0) {
-                    map.setView([data[0].lat, data[0].lon], 15);
+                    map.setView([data[0].lat, data[0].lon], 17);
                     buscarDatos(data[0].lat, data[0].lon);
                 }
             });
