@@ -3,96 +3,119 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tobacco & Vaper VIP Tracker</title>
+    <title>Vaper Tracker Pro</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;700&display=swap" rel="stylesheet">
 
     <style>
-        :root { --gold: #d4af37; --dark: #121212; --glass: rgba(30, 30, 30, 0.9); }
-        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Plus Jakarta Sans', sans-serif; background: var(--dark); }
-        #map { height: 100vh; width: 100%; }
+        body, html { margin: 0; padding: 0; height: 100%; font-family: sans-serif; }
+        #map { height: 100vh; width: 100%; z-index: 1; }
 
-        /* Banner Superior */
-        .top-bar {
-            position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
-            z-index: 2000; background: var(--glass); backdrop-filter: blur(10px);
-            padding: 10px 20px; border-radius: 15px; border: 1px solid var(--gold);
-            color: white; font-size: 14px; font-weight: bold; text-align: center; width: 80%;
+        /* Buscador */
+        .search-bar {
+            position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+            z-index: 1000; width: 85%; max-width: 400px; display: flex; gap: 5px;
         }
+        .search-bar input { flex: 1; padding: 12px; border-radius: 25px; border: 1px solid #ccc; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
 
-        /* Popups Estilo Tarjeta */
-        .leaflet-popup-content-wrapper { background: var(--dark); color: white; border-radius: 15px; border: 1px solid var(--gold); }
-        .leaflet-popup-tip { background: var(--gold); }
-        
-        .card { padding: 5px; text-align: center; }
-        .card h3 { color: var(--gold); margin: 5px 0; font-size: 16px; }
-        .badge { background: #222; border: 1px solid #444; padding: 4px 10px; border-radius: 8px; display: inline-block; margin-bottom: 8px; font-size: 11px; text-transform: uppercase; }
-        
-        .btn-google {
-            display: block; width: 100%; background: var(--gold); color: black;
-            text-decoration: none; text-align: center; padding: 12px; border-radius: 10px;
-            font-weight: bold; margin-top: 10px; font-size: 13px;
+        /* Panel de Captura Lateral */
+        #sidebar {
+            position: absolute; left: -280px; top: 0; width: 260px; height: 100%;
+            background: white; z-index: 2000; transition: 0.3s; padding: 20px;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.2); overflow-y: auto;
         }
+        #sidebar.active { left: 0; }
+        .btn-menu { position: absolute; left: 10px; top: 70px; z-index: 1500; background: white; border: 1px solid #ccc; padding: 10px; border-radius: 5px; cursor: pointer; }
 
-        .btn-gps {
-            position: absolute; bottom: 30px; right: 20px; z-index: 2000;
-            background: var(--gold); border: none; width: 60px; height: 60px;
-            border-radius: 50%; font-size: 25px; cursor: pointer; box-shadow: 0 5px 15px rgba(0,0,0,0.5);
-        }
+        /* Estilos de elementos */
+        .cap-item { background: #f9f9f9; padding: 10px; border-radius: 8px; margin-bottom: 10px; border-left: 5px solid #2563eb; font-size: 12px; }
+        .btn-google { display: block; background: #4285F4; color: white; text-align: center; padding: 10px; text-decoration: none; border-radius: 8px; margin-top: 8px; font-weight: bold; }
+        .badge { font-size: 10px; padding: 3px 8px; border-radius: 4px; color: white; font-weight: bold; text-transform: uppercase; }
     </style>
 </head>
 <body>
 
-    <div class="top-bar">📍 ESTANCOS, BAZARES Y SUPERMERCADOS</div>
-    <button class="btn-gps" onclick="centrarMapa()">🎯</button>
+    <div class="search-bar">
+        <input type="text" id="address" placeholder="Buscar ciudad o calle...">
+        <button onclick="buscarManual()" style="border-radius: 25px; cursor: pointer; padding: 0 15px;">🔍</button>
+    </div>
+
+    <button class="btn-menu" onclick="document.getElementById('sidebar').classList.toggle('active')">📋 LISTA BOE</button>
+
+    <div id="sidebar">
+        <h3>Puntos Capturados</h3>
+        <p><small>Haz clic en el mapa para anotar coordenadas manualmente.</small></p>
+        <div id="lista-coords"></div>
+    </div>
+
     <div id="map"></div>
 
     <script>
-        // Inicialización del mapa
+        // Inicializar mapa
         var map = L.map('map', { zoomControl: false }).setView([40.41, -3.70], 6);
         
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+        // Capa de mapa estándar (la más fiable)
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-        var iconE = L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png', iconSize: [25, 41], iconAnchor: [12, 41] });
-        var iconB = L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-gold.png', iconSize: [25, 41], iconAnchor: [12, 41] });
+        // Iconos
+        var iconRed = L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png', iconSize: [25, 41], iconAnchor: [12, 41] });
+        var iconGold = L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-gold.png', iconSize: [25, 41], iconAnchor: [12, 41] });
 
-        // Forzar ubicación al cargar
-        function centrarMapa() {
-            map.locate({setView: true, maxZoom: 16});
-        }
-
-        centrarMapa(); // Ejecutar nada más abrir
+        // 1. Pedir ubicación al entrar
+        map.locate({setView: true, maxZoom: 15});
 
         map.on('locationfound', function(e) {
-            L.circle(e.latlng, {radius: 200, color: var(--gold)}).addTo(map);
-            buscarPuntos(e.latlng.lat, e.latlng.lng);
+            buscarDatos(e.latlng.lat, e.latlng.lng);
         });
 
-        function buscarPuntos(lat, lng) {
-            const radio = 4000;
-            const query = `[out:json];(
-                node["shop"="tobacco"](around:${radio},${lat},${lng});
-                node["shop"~"variety_store|convenience|supermarket"](around:${radio},${lat},${lng});
-                node["amenity"="fuel"](around:${radio},${lat},${lng});
-            );out;`;
+        map.on('locationerror', function() {
+            alert("No se pudo obtener tu ubicación. Usa el buscador de arriba.");
+        });
 
+        // 2. Función de captura al hacer clic
+        map.on('click', function(e) {
+            var lat = e.latlng.lat.toFixed(6);
+            var lng = e.latlng.lng.toFixed(6);
+            var item = document.createElement("div");
+            item.className = "cap-item";
+            item.innerHTML = "<b>Coordenadas:</b><br>" + lat + ", " + lng;
+            document.getElementById("lista-coords").prepend(item);
+            document.getElementById('sidebar').classList.add('active');
+        });
+
+        // 3. Buscador manual
+        function buscarManual() {
+            var val = document.getElementById('address').value;
+            fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + val)
+            .then(r => r.json()).then(data => {
+                if(data.length > 0) {
+                    var target = [data[0].lat, data[0].lon];
+                    map.setView(target, 15);
+                    buscarDatos(data[0].lat, data[0].lon);
+                }
+            });
+        }
+
+        // 4. Carga de Estancos, Bazares y Súper
+        function buscarDatos(lat, lng) {
+            var query = `[out:json];(node["shop"="tobacco"](around:3000,${lat},${lng});node["shop"~"variety_store|convenience|supermarket"](around:3000,${lat},${lng}););out;`;
+            
             fetch("https://overpass-api.de/api/interpreter?data=" + encodeURIComponent(query))
             .then(r => r.json()).then(d => {
                 d.elements.forEach(p => {
-                    let tipo = "Bazar / Supermercado", icono = iconB;
-                    if(p.tags.shop === "tobacco") { tipo = "Estanco Oficial"; icono = iconE; }
+                    var esEstanco = p.tags.shop === "tobacco";
+                    var nombre = p.tags.name || (esEstanco ? "Estanco" : "Bazar / Supermercado");
+                    var color = esEstanco ? "red" : "gold";
                     
-                    let nombre = p.tags.name || tipo;
-                    let googleSearchUrl = `https://www.google.com/maps/search/${encodeURIComponent(nombre)}+${p.lat},${p.lon}`;
+                    var gLink = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(nombre + " " + p.lat + "," + p.lon);
 
-                    L.marker([p.lat, p.lon], {icon: icono}).addTo(map).bindPopup(`
-                        <div class="card">
-                            <span class="badge">${tipo}</span>
-                            <h3>${nombre}</h3>
-                            <p style="font-size:11px; color:#aaa;">Horario real en Google Maps:</p>
-                            <a href="${googleSearchUrl}" target="_blank" class="btn-google">🕒 VER HORARIO Y RUTA</a>
+                    L.marker([p.lat, p.lon], {icon: esEstanco ? iconRed : iconGold}).addTo(map)
+                    .bindPopup(`
+                        <div style="text-align:center">
+                            <span class="badge" style="background:${esEstanco ? '#e11d48' : '#eab308'}">${esEstanco ? 'ESTANCO' : 'BAZAR / SUPER'}</span>
+                            <h4>${nombre}</h4>
+                            <a href="${gLink}" target="_blank" class="btn-google">🕒 VER HORARIO</a>
                         </div>
                     `);
                 });
