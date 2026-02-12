@@ -21,11 +21,13 @@ html, body {height:100%; margin:0; font-family:Arial,sans-serif;}
 .search-bar button:hover{background:#1e4eb8;}
 .btn-locate{position:absolute; bottom:100px; right:20px; z-index:1500; width:50px; height:50px; background:#2563eb; border-radius:50%; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 12px rgba(0,0,0,0.25); border:none; cursor:pointer; color:white; font-size:24px;}
 .btn-add-manual{position:absolute; bottom:30px; left:20px; z-index:1500; background:rgba(255,255,255,0.95); border:1px solid #ccc; padding:8px 14px; border-radius:18px; font-size:13px; font-weight:bold; cursor:pointer; color:#444; box-shadow:0 2px 6px rgba(0,0,0,0.15);}
+.btn-search-area{position:absolute; bottom:30px; right:20px; z-index:1500; background:#2563eb; border:none; padding:8px 14px; border-radius:18px; font-size:13px; font-weight:bold; cursor:pointer; color:white; box-shadow:0 2px 6px rgba(0,0,0,0.25);}
 .legend-item{display:flex; align-items:center; margin-bottom:6px;}
 .legend-color{width:18px; height:18px; border-radius:4px; margin-right:8px; border:1px solid #999;}
 .badge{font-size:12px; padding:3px 6px; border-radius:8px;}
 .open{background:#22c55e;color:white;}
 .closed{background:#ef4444;color:white;}
+#miscFilters{position:fixed; bottom:80px; left:50%; transform:translateX(-50%); z-index:1500; background:rgba(255,255,255,0.95); padding:10px 15px; border-radius:12px; box-shadow:0 3px 10px rgba(0,0,0,0.2); display:flex; gap:10px;}
 </style>
 </head>
 <body>
@@ -36,8 +38,9 @@ html, body {height:100%; margin:0; font-family:Arial,sans-serif;}
 <label><input type="checkbox" id="greyClosed" checked> Cerrados en gris</label>
 <hr>
 <input type="text" id="searchName" placeholder="Buscar por nombre">
-<hr>
-<h4>Tipos de locales</h4>
+</div>
+
+<div id="miscFilters">
 <label class="legend-item"><input type="checkbox" id="toggleEstanco" checked><div class="legend-color" style="background:red;"></div>Estanco</label>
 <label class="legend-item"><input type="checkbox" id="toggleVaper" checked><div class="legend-color" style="background:darkblue;"></div>Vaper</label>
 <label class="legend-item"><input type="checkbox" id="toggleMisc" checked><div class="legend-color" style="background:green;"></div>Miscelánea</label>
@@ -52,6 +55,7 @@ html, body {height:100%; margin:0; font-family:Arial,sans-serif;}
 
 <button class="btn-locate" id="locateBtn">📍</button>
 <button class="btn-add-manual" id="addBtn">➕ Guardar coordenada</button>
+<button class="btn-search-area" id="searchAreaBtn">Buscar en esta área</button>
 
 <div id="map"></div>
 
@@ -81,20 +85,12 @@ if(navigator.geolocation){
   },err=>console.log("GPS error:",err),{enableHighAccuracy:true, maximumAge:0, timeout:5000});
 }
 
-// Iconos vectoriales simples
 function icon(color){return L.icon({iconUrl:`https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,shadowUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',iconSize:[25,41],iconAnchor:[12,41]})}
-
-const icons={
-estanco:icon("red"),
-vaper:icon("darkblue"),
-misc:icon("green"),
-grey:icon("grey")
-};
+const icons={estanco:icon("red"),vaper:icon("darkblue"),misc:icon("green"),grey:icon("grey")};
 
 let elementsData=[];
 let filter={estanco:true,vaper:true,misc:true};
 
-// Analizar horario
 function analizarHorario(opening){
 if(!opening) return {estado:null,texto:"<span class='badge closed'>Horario desconocido</span>"};
 if(opening.includes("24/7")) return {estado:true,texto:"<span class='badge open'>24/7</span>"};
@@ -130,7 +126,6 @@ render();
 }catch(e){console.log("Error Overpass",e);}
 }
 
-// Renderizar marcadores
 function render(){
 cluster.clearLayers();
 const onlyOpen=document.getElementById("onlyOpen").checked;
@@ -138,7 +133,6 @@ const greyClosed=document.getElementById("greyClosed").checked;
 const search=document.getElementById("searchName").value.toLowerCase();
 
 elementsData.forEach(p=>{
-// Determinar tipo
 let tipo="misc"; 
 if(p.tags?.shop==="tobacco") tipo="estanco";
 else if(p.tags?.shop==="vape") tipo="vaper";
@@ -146,19 +140,16 @@ else if(p.tags?.shop==="vape") tipo="vaper";
 if(!filter[tipo]) return;
 if(search && !p.tags?.name?.toLowerCase().includes(search)) return;
 
-// Horario
 const horario=analizarHorario(p.tags?.opening_hours);
 if(onlyOpen && horario.estado===false) return;
 
-// Icono gris si cerrado
 let icono=icons[tipo];
 if(horario.estado===false && greyClosed) icono=icons.grey;
 
-// Popup indicando Tabaco y Vaper
-const tieneTabaco=p.tags?.shop==="tobacco"||p.tags?.shop==="vape";
-const tieneVaper=p.tags?.shop==="vape"||p.tags?.vending?.includes("vapers")||tieneTabaco;
-const popupHTML=`<b>${p.tags?.name||tipo}</b><br>${horario.texto}<br>
-Tabaco: ✅<br>Vaper: ${tieneVaper?"✅":"❌"}<br>
+const tieneTabaco=true;
+const tieneVaper=p.tags?.shop==="vape"||p.tags?.vending?.includes("vapers")||true;
+
+const popupHTML=`<b>${p.tags?.name||tipo}</b><br>${horario.texto}<br>Tabaco: ✅<br>Vaper: ${tieneVaper?"✅":"❌"}<br>
 <a href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}" target="_blank">Cómo llegar</a>`;
 
 const marker=L.marker([p.lat,p.lon],{icon:icono}).bindPopup(popupHTML);
@@ -181,6 +172,9 @@ document.getElementById("locateBtn").onclick=()=>{if(userLocation) map.flyTo(use
 // Guardar coordenada manual
 document.getElementById("addBtn").onclick=()=>{const c=map.getCenter(); alert("Coordenada guardada: "+c.lat.toFixed(6)+", "+c.lng.toFixed(6));};
 
+// Buscar en área actual
+document.getElementById("searchAreaBtn").onclick=buscarDatos;
+
 // Búsqueda ciudad
 document.getElementById("searchBtn").onclick=async()=>{
 const val=document.getElementById("address").value;
@@ -188,9 +182,6 @@ const resp=await fetch('https://nominatim.openstreetmap.org/search?format=json&q
 const data=await resp.json();
 if(data.length) map.flyTo([data[0].lat,data[0].lon],14);
 };
-
-// Actualizar datos al mover mapa
-map.on("moveend",buscarDatos);
 
 // Primera carga
 setTimeout(buscarDatos,1500);
