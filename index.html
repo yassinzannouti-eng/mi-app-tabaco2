@@ -1,149 +1,44 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Localizador de Estancos</title>
-
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-
-<style>
-html,body{height:100%;margin:0;font-family:Arial;}
-#map{height:100%;width:100%;display:none;}
-
-#loading{
-position:fixed;
-top:0;left:0;
-width:100%;height:100%;
-display:flex;
-align-items:center;
-justify-content:center;
-background:white;
-z-index:5000;
-font-size:18px;
-}
-
-#menuButton{
-position:fixed;top:15px;left:15px;z-index:2000;
-background:white;border:none;padding:10px;
-border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.25);
-cursor:pointer;
-}
-#panel{
-position:fixed;top:0;left:-270px;width:250px;height:100%;
-background:white;z-index:2100;padding:20px;
-box-shadow:2px 0 15px rgba(0,0,0,0.25);
-transition:.3s;overflow:auto;
-}
-#panel.active{left:0;}
-
-.search-bar{
-position:absolute;top:15px;left:50%;
-transform:translateX(-50%);
-z-index:1500;display:flex;background:white;
-border-radius:25px;box-shadow:0 4px 15px rgba(0,0,0,0.18);
-overflow:hidden;width:85%;max-width:400px;
-}
-.search-bar input{flex:1;padding:10px;border:none;outline:none;}
-.search-bar button{padding:10px;border:none;background:#2563eb;color:white;cursor:pointer;}
-
-.btn-pin{
-position:absolute;bottom:100px;right:20px;
-width:50px;height:50px;background:#2563eb;
-border-radius:50%;display:flex;align-items:center;
-justify-content:center;color:white;font-size:22px;
-border:none;cursor:pointer;z-index:1500;
-box-shadow:0 4px 12px rgba(0,0,0,0.3);
-}
-.btn-search-area{
-position:absolute;bottom:30px;right:20px;
-background:#2563eb;color:white;border:none;
-padding:10px 15px;border-radius:20px;
-cursor:pointer;z-index:1500;
-box-shadow:0 3px 10px rgba(0,0,0,0.3);
-}
-
-#filters{
-position:absolute;bottom:30px;left:50%;
-transform:translateX(-50%);
-background:white;padding:10px 15px;
-border-radius:12px;display:flex;gap:15px;
-z-index:1500;box-shadow:0 3px 10px rgba(0,0,0,0.25);
-font-size:14px;
-}
-
-.badge{padding:3px 6px;border-radius:6px;color:white;font-size:12px;}
-.open{background:#22c55e;}
-.closed{background:#ef4444;}
-</style>
-</head>
-
-<body>
-
-<div id="loading">Solicitando ubicación...</div>
-
-<button id="menuButton">☰</button>
-
-<div id="panel">
-<h3>Filtros</h3>
-<label><input type="checkbox" id="onlyOpen"> Solo abiertos</label><br>
-<label><input type="checkbox" id="greyClosed" checked> Cerrados en gris</label>
-</div>
-
-<div class="search-bar">
-<input type="text" id="address" placeholder="Buscar ciudad o zona">
-<button id="searchBtn">🔍</button>
-</div>
-
-<button class="btn-pin" id="pinBtn">📍</button>
-<button class="btn-search-area" id="searchAreaBtn">Buscar en esta zona</button>
-
-<div id="filters">
-<label><input type="checkbox" id="fEstanco" checked> 🔴 Estanco</label>
-<label><input type="checkbox" id="fSuper" checked> 🟢 Supermercado</label>
-<label><input type="checkbox" id="fBazar" checked> 🟣 Bazar</label>
-<label><input type="checkbox" id="fGas" checked> 🟡 Gasolinera</label>
-</div>
-
-<div id="map"></div>
-
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
 <script>
 document.addEventListener("DOMContentLoaded",()=>{
 
-if(!navigator.geolocation){
-alert("Tu navegador no soporta geolocalización.");
-return;
-}
-
-navigator.geolocation.getCurrentPosition(
-pos=>iniciar(pos.coords.latitude,pos.coords.longitude),
-()=>alert("Debes permitir la ubicación para usar la aplicación."),
-{enableHighAccuracy:true,timeout:10000}
-);
-
-let map,userMarker,userLocation,elementsData=[];
+let map;
+let userLocation=null;
+let elementsData=[];
 let markersLayer;
+let userMarker;
 
-function iniciar(lat,lon){
-
-document.getElementById("loading").style.display="none";
-document.getElementById("map").style.display="block";
-
-userLocation={lat,lon};
-
-map=L.map('map').setView([lat,lon],15);
+/* INICIAR MAPA VACÍO (SIN ESPAÑA) */
+map=L.map('map',{zoomControl:true});
+markersLayer=L.layerGroup().addTo(map);
 
 L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{
 attribution:'©OpenStreetMap ©CARTO'
 }).addTo(map);
 
-markersLayer=L.layerGroup().addTo(map);
+/* GEOLOCALIZACIÓN PRIORITARIA PERO NO AGRESIVA */
+if(navigator.geolocation){
+navigator.geolocation.getCurrentPosition(
+pos=>{
+iniciarMapa(pos.coords.latitude,pos.coords.longitude);
+},
+err=>{
+console.log("Ubicación no concedida");
+},
+{enableHighAccuracy:true,timeout:10000}
+);
+}
+
+function iniciarMapa(lat,lon){
+
+userLocation={lat,lon};
+
+map.setView([lat,lon],15);
 
 userMarker=L.circleMarker([lat,lon],{
-radius:8,color:"#2563eb",
-fillColor:"#2563eb",fillOpacity:0.9
+radius:8,
+color:"#2563eb",
+fillColor:"#2563eb",
+fillOpacity:0.9
 }).addTo(map);
 
 buscarDatos();
@@ -151,13 +46,17 @@ buscarDatos();
 
 /* CACHE POR ZONA */
 function cacheKey(){
+if(!map) return null;
 const c=map.getCenter();
 return `${c.lat.toFixed(2)}_${c.lng.toFixed(2)}_${map.getZoom()}`;
 }
 
 async function buscarDatos(){
 
+if(!userLocation) return;
+
 const key=cacheKey();
+
 if(localStorage.getItem(key)){
 elementsData=JSON.parse(localStorage.getItem(key));
 render();
@@ -177,52 +76,67 @@ node["amenity"="fuel"](around:${radio},${c.lat},${c.lng});
 );
 out;`;
 
-const resp=await fetch("https://overpass-api.de/api/interpreter",{method:"POST",body:query});
+try{
+const resp=await fetch("https://overpass-api.de/api/interpreter",{
+method:"POST",
+body:query
+});
 const data=await resp.json();
 elementsData=data.elements||[];
-
 localStorage.setItem(key,JSON.stringify(elementsData));
-
 render();
+}catch(e){
+console.log("Error Overpass",e);
+}
 }
 
 /* HORARIOS */
 function analizarHorario(opening){
 if(!opening) return {estado:null,texto:"Horario desconocido"};
 if(opening.includes("24/7")) return {estado:true,texto:"<span class='badge open'>24/7</span>"};
+
 const now=new Date();
 const min=now.getHours()*60+now.getMinutes();
 const rangos=[...opening.matchAll(/(\d{2}:\d{2})-(\d{2}:\d{2})/g)];
+
 for(let r of rangos){
 const mi=parseInt(r[1].slice(0,2))*60+parseInt(r[1].slice(3));
 const mf=parseInt(r[2].slice(0,2))*60+parseInt(r[2].slice(3));
-if(min>=mi&&min<=mf) return {estado:true,texto:"<span class='badge open'>Abierto</span>"};
+if(min>=mi&&min<=mf)
+return {estado:true,texto:"<span class='badge open'>Abierto</span>"};
 }
 return {estado:false,texto:"<span class='badge closed'>Cerrado</span>"};
 }
 
 /* RENDER */
 function render(){
+
 markersLayer.clearLayers();
 
 elementsData.forEach(p=>{
+
 let tipo=null;
+
 if(p.tags?.shop==="tobacco") tipo="red";
 else if(p.tags?.shop==="supermarket") tipo="green";
 else if(p.tags?.shop==="variety_store") tipo="violet";
 else if(p.tags?.amenity==="fuel") tipo="yellow";
+
 if(!tipo) return;
 
 const horario=analizarHorario(p.tags?.opening_hours);
+
 if(onlyOpen.checked && horario.estado===false) return;
 
 let iconColor=tipo;
-if(horario.estado===false && greyClosed.checked) iconColor="grey";
+if(horario.estado===false && greyClosed.checked)
+iconColor="grey";
 
 const icon=L.icon({
 iconUrl:`https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${iconColor}.png`,
 shadowUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-iconSize:[25,41],iconAnchor:[12,41]
+iconSize:[25,41],
+iconAnchor:[12,41]
 });
 
 const nombre=p.tags?.name||"Local";
@@ -237,17 +151,17 @@ target="_blank">Cómo llegar</a>
 L.marker([p.lat,p.lon],{icon})
 .bindPopup(popup)
 .addTo(markersLayer);
+
 });
 }
 
 /* EVENTOS */
 menuButton.onclick=()=>panel.classList.toggle("active");
-pinBtn.onclick=()=>map.flyTo(userLocation,16);
+pinBtn.onclick=()=>{if(userLocation) map.flyTo(userLocation,16);}
 searchAreaBtn.onclick=buscarDatos;
+
 document.querySelectorAll("#filters input,#onlyOpen,#greyClosed")
 .forEach(el=>el.onchange=render);
 
 });
-</script>
-</body>
-</html>
+  </script>
