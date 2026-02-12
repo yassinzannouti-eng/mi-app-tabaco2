@@ -3,33 +3,29 @@ document.addEventListener("DOMContentLoaded",()=>{
 
 let userLocation=null;
 let elementsData=[];
-let markersLayer=L.layerGroup();
+let mapaListo=false;
 
-const map=L.map('map',{zoomControl:false});
-L.control.zoom({position:'bottomright'}).addTo(map);
+const map=L.map('map',{preferCanvas:true})
+.setView([40.4168,-3.7038],13);
 
 L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{
   attribution:'©OpenStreetMap ©CARTO'
 }).addTo(map);
 
-map.addLayer(markersLayer);
+const markersLayer=L.layerGroup().addTo(map);
 
 const userMarker=L.circleMarker([0,0],{
   radius:8,
   color:"#2563eb",
   fillColor:"#2563eb",
-  fillOpacity:0.8
+  fillOpacity:0.9
 }).addTo(map);
 
-const icons={
-  estanco:createIcon("red"),
-  supermercado:createIcon("green"),
-  bazar:createIcon("violet"),
-  gasolinera:createIcon("yellow"),
-  grey:createIcon("grey")
-};
+/* =========================
+   ICONOS
+========================= */
 
-function createIcon(color){
+function icon(color){
   return L.icon({
     iconUrl:`https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
     shadowUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
@@ -38,25 +34,26 @@ function createIcon(color){
   });
 }
 
-/* =========================
-   GEOLOCALIZACIÓN PRIORIDAD
-========================= */
+const icons={
+  estanco:icon("red"),
+  supermercado:icon("green"),
+  bazar:icon("violet"),
+  gasolinera:icon("yellow")
+};
 
-function iniciarMapa(lat,lon){
-  userLocation={lat,lon};
-  map.setView([lat,lon],15);
-  userMarker.setLatLng([lat,lon]);
-  buscarDatos();
-}
+/* =========================
+   GEOLOCALIZACIÓN
+========================= */
 
 if(navigator.geolocation){
   navigator.geolocation.getCurrentPosition(pos=>{
-    iniciarMapa(pos.coords.latitude,pos.coords.longitude);
-  },()=>{
-    // Ubicación estimada ligera por IP
-    fetch("https://ipapi.co/json/")
-    .then(r=>r.json())
-    .then(data=>iniciarMapa(data.latitude,data.longitude));
+    const lat=pos.coords.latitude;
+    const lon=pos.coords.longitude;
+    userLocation={lat,lon};
+    map.setView([lat,lon],15);
+    userMarker.setLatLng([lat,lon]);
+    mapaListo=true;
+    buscarDatos();
   });
 }
 
@@ -77,45 +74,75 @@ document.getElementById("toggleBazar").onchange=e=>{filtros.bazar=e.target.check
 document.getElementById("toggleGas").onchange=e=>{filtros.gasolinera=e.target.checked; render();}
 
 /* =========================
-   BUSCAR DATOS LIGERO
+   SERVIDORES OVERPASS
+========================= */
+
+const endpoints=[
+  "https://overpass-api.de/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
+  "https://overpass.openstreetmap.ru/api/interpreter"
+];
+
+async function fetchOverpass(query){
+
+  for(let url of endpoints){
+    try{
+      const resp=await fetch(url,{method:"POST",body:query});
+      if(resp.ok){
+        return await resp.json();
+      }
+    }catch(e){
+      continue;
+    }
+  }
+
+  throw new Error("Todos los servidores Overpass fallaron");
+}
+
+/* =========================
+   BUSCAR DATOS (BBox real)
 ========================= */
 
 async function buscarDatos(){
 
-  const bounds=map.getBounds();
-  const zoom=map.getZoom();
-  const radio=zoom>=16?2000:zoom>=14?4000:6000;
+  if(!mapaListo) return;
 
-  const c=map.getCenter();
+  if(map.getZoom()<13){
+    markersLayer.clearLayers();
+    return;
+  }
 
-  const query=`[out:json][timeout:20];
+  const b=map.getBounds();
+
+  const query=`
+  [out:json][timeout:15];
   (
-    node["shop"="tobacco"](around:${radio},${c.lat},${c.lng});
-    node["shop"="supermarket"](around:${radio},${c.lat},${c.lng});
-    node["shop"="variety_store"](around:${radio},${c.lat},${c.lng});
-    node["amenity"="fuel"](around:${radio},${c.lat},${c.lng});
+    node["shop"="tobacco"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});
+    node["shop"="supermarket"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});
+    node["shop"="variety_store"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});
+    node["amenity"="fuel"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});
   );
-  out;`;
+  out body;
+  `;
 
   try{
-    const resp=await fetch("https://overpass-api.de/api/interpreter",{method:"POST",body:query});
-    const data=await resp.json();
+    const data=await fetchOverpass(query);
     elementsData=data.elements||[];
     render();
   }catch(e){
-    console.log("Error Overpass",e);
+    console.log(e);
   }
 }
 
 /* =========================
-   RENDER MARCADORES
+   RENDER
 ========================= */
 
 function render(){
 
   markersLayer.clearLayers();
 
-  elementsData.forEach(p=>{
+  for(let p of elementsData){
 
     let tipo=null;
 
@@ -124,21 +151,18 @@ function render(){
     else if(p.tags?.shop==="variety_store") tipo="bazar";
     else if(p.tags?.amenity==="fuel") tipo="gasolinera";
 
-    if(!tipo || !filtros[tipo]) return;
+    if(!tipo || !filtros[tipo]) continue;
 
-    const popupHTML=`
+    const popup=`
       <b>${p.tags?.name||tipo}</b><br>
       <a href="https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}" target="_blank">
       Ver en Maps</a>
     `;
 
-    const marker=L.marker([p.lat,p.lon],{icon:icons[tipo]})
-      .bindPopup(popupHTML);
-
-    markersLayer.addLayer(marker);
-
-  });
-
+    L.marker([p.lat,p.lon],{icon:icons[tipo]})
+      .bindPopup(popup)
+      .addTo(markersLayer);
+  }
 }
 
 /* =========================
@@ -151,16 +175,10 @@ document.getElementById("locateBtn").onclick=()=>{
 
 document.getElementById("searchAreaBtn").onclick=buscarDatos;
 
-document.getElementById("searchBtn").onclick=async()=>{
-  const val=document.getElementById("address").value;
-  if(!val) return;
-  const resp=await fetch('https://nominatim.openstreetmap.org/search?format=json&q='+encodeURIComponent(val));
-  const data=await resp.json();
-  if(data.length){
-    map.flyTo([data[0].lat,data[0].lon],15);
-    buscarDatos();
-  }
-};
+map.on("moveend",()=>{
+  clearTimeout(window.moveTimer);
+  window.moveTimer=setTimeout(buscarDatos,500);
+});
 
 });
-</script>
+      </script>
