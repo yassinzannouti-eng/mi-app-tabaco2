@@ -3,59 +3,77 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Vaper Tracker ESTABLE</title>
+<title>Vaper Tracker PRO+</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
 
 <style>
-html,body{height:100%;margin:0;font-family:Arial;}
+html,body{height:100%;margin:0;font-family:'Segoe UI',sans-serif;}
 #map{height:100%;width:100%;}
-#menuButton{
-position:fixed;top:15px;left:15px;z-index:2000;
-background:white;border:none;padding:10px;border-radius:8px;
-box-shadow:0 3px 8px rgba(0,0,0,0.2);cursor:pointer;
-}
-#panel{
-position:fixed;top:0;left:-260px;width:240px;height:100%;
-background:white;z-index:2100;padding:20px;
-box-shadow:2px 0 15px rgba(0,0,0,0.2);
-transition:.3s;
-overflow:auto;
-}
-#panel.active{left:0;}
-.search{
-position:absolute;top:15px;left:50%;
-transform:translateX(-50%);
-z-index:1500;display:flex;
-background:white;border-radius:25px;
-box-shadow:0 4px 15px rgba(0,0,0,0.18);
-overflow:hidden;
-}
-.search input{padding:10px;border:none;outline:none;}
-.search button{padding:10px;border:none;background:#2563eb;color:white;}
-.badge{font-size:12px;padding:3px 6px;border-radius:8px;}
-.open{background:#22c55e;color:white;}
-.closed{background:#ef4444;color:white;}
+#sidebar{position:fixed;top:0;left:-280px;width:260px;height:100%;background:white;
+box-shadow:2px 0 15px rgba(0,0,0,0.2);transition:left .3s ease;z-index:2000;
+padding:20px;font-size:14px;overflow-y:auto;}
+#sidebar.active{left:0;}
+#menuButton{position:fixed;top:15px;left:15px;z-index:2100;background:white;
+border:none;padding:10px 12px;border-radius:8px;box-shadow:0 3px 8px rgba(0,0,0,0.2);
+cursor:pointer;font-size:18px;}
+.search-bar{position:absolute;top:15px;left:50%;transform:translateX(-50%);
+z-index:1100;width:85%;max-width:400px;display:flex;box-shadow:0 4px 15px rgba(0,0,0,0.18);
+border-radius:25px;overflow:hidden;background:#fff;}
+.search-bar input{flex:1;padding:12px;border:none;outline:none;}
+.search-bar button{padding:12px;border:none;background:#2563eb;color:white;cursor:pointer;}
+.btn-search-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+z-index:1050;background:white;border:1px solid #ccc;padding:10px 18px;
+border-radius:20px;font-weight:bold;cursor:pointer;display:none;}
+.legend-item{display:flex;align-items:center;margin-bottom:5px;}
+.legend-color{width:15px;height:15px;border-radius:4px;margin-right:6px;}
+.count{font-weight:bold;margin-left:5px;}
+.fav{color:gold;font-weight:bold;}
 </style>
 </head>
 <body>
 
-<div id="panel">
-<h3>Filtros</h3>
-<label><input type="checkbox" id="onlyOpen"> Solo abiertos</label><br>
-<label><input type="checkbox" id="greyClosed" checked> Cerrados en gris</label>
+<div id="sidebar">
+<h3>⚙ Ajustes</h3>
+
+<label><input type="checkbox" id="toggleAutoSearch" checked> Buscar al mover mapa</label><br><br>
+<label><input type="checkbox" id="toggleOnlyOpen"> Mostrar solo abiertos</label><br>
+<label><input type="checkbox" id="toggleGreyClosed" checked> Cerrados en gris</label>
+
 <hr>
-<input type="text" id="searchName" placeholder="Buscar por nombre">
+
+<h4>Tipos</h4>
+<label class="legend-item"><input type="checkbox" id="toggleEstanco" checked>
+<div class="legend-color" style="background:red;"></div>Estanco <span class="count" id="countEstanco">0</span></label>
+
+<label class="legend-item"><input type="checkbox" id="toggleTienda" checked>
+<div class="legend-color" style="background:gold;"></div>Tienda <span class="count" id="countTienda">0</span></label>
+
+<label class="legend-item"><input type="checkbox" id="toggleSuper" checked>
+<div class="legend-color" style="background:green;"></div>Super <span class="count" id="countSuper">0</span></label>
+
+<label class="legend-item"><input type="checkbox" id="toggleBar" checked>
+<div class="legend-color" style="background:purple;"></div>Bar <span class="count" id="countBar">0</span></label>
+
+<label class="legend-item"><input type="checkbox" id="toggleGas" checked>
+<div class="legend-color" style="background:orange;"></div>Gasolinera <span class="count" id="countGas">0</span></label>
+
+<hr>
+<h4>⭐ Favoritos</h4>
+<div id="favList"></div>
+
 </div>
 
 <button id="menuButton">☰</button>
 
-<div class="search">
-<input type="text" id="address" placeholder="Buscar ciudad">
-<button id="searchBtn">🔍</button>
+<div class="search-bar">
+<input type="text" id="address" placeholder="Buscar ciudad o zona...">
+<button id="searchButton">🔍</button>
 </div>
+
+<button class="btn-search-center" id="searchCenterButton">Buscar en esta área</button>
 
 <div id="map"></div>
 
@@ -67,138 +85,195 @@ document.addEventListener("DOMContentLoaded",()=>{
 
 const map=L.map('map').setView([40.41,-3.70],6);
 
-L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{
-attribution:'©OpenStreetMap'
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{
+attribution:'©OpenStreetMap ©CARTO'
 }).addTo(map);
 
 const cluster=L.markerClusterGroup();
 map.addLayer(cluster);
 
-let userLocation=null;
-let elementsData=[];
+const cache=new Map();
+let filter={estanco:true,tienda:true,super:true,bar:true,gas:true};
+let favoritos=JSON.parse(localStorage.getItem("favoritos")||"[]");
 
-map.locate({enableHighAccuracy:true});
-map.on('locationfound',e=>{userLocation=e.latlng;});
+const icons={
+estanco:colorIcon("red"),
+tienda:colorIcon("gold"),
+super:colorIcon("green"),
+bar:colorIcon("violet"),
+gas:colorIcon("orange"),
+closed:colorIcon("grey")
+};
 
-function icon(color){
+function colorIcon(color){
 return L.icon({
 iconUrl:`https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
 shadowUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-iconSize:[25,41],iconAnchor:[12,41]
+iconSize:[25,41],
+iconAnchor:[12,41]
 });
 }
 
-const redIcon=icon("red");
-const greyIcon=icon("grey");
-
-function analizarHorario(opening){
-if(!opening)return {estado:null,texto:"Horario desconocido"};
-
-if(opening.includes("24/7"))
-return {estado:true,texto:"<span class='badge open'>24/7</span>"};
-
-const now=new Date();
-const min=now.getHours()*60+now.getMinutes();
-const match=[...opening.matchAll(/(\d{2}:\d{2})-(\d{2}:\d{2})/g)];
-
-for(let r of match){
-const i=r[1].split(":");
-const f=r[2].split(":");
-const mi=parseInt(i[0])*60+parseInt(i[1]);
-const mf=parseInt(f[0])*60+parseInt(f[1]);
-if(min>=mi&&min<=mf)
-return {estado:true,texto:"<span class='badge open'>Abierto</span>"};
+function generarKey(){
+const c=map.getCenter();
+return `${c.lat.toFixed(3)}_${c.lng.toFixed(3)}_${map.getZoom()}`;
 }
 
-return {estado:false,texto:"<span class='badge closed'>Cerrado</span>"};
+function calcularRadio(){
+const z=map.getZoom();
+if(z>=15)return 1500;
+if(z>=13)return 3000;
+if(z>=11)return 6000;
+return 10000;
+}
+
+function estaAbiertoAhora(opening){
+if(!opening)return null;
+const ahora=new Date();
+const minutos=ahora.getHours()*60+ahora.getMinutes();
+const match=opening.match(/(\d{2}:\d{2})-(\d{2}:\d{2})/);
+if(!match)return null;
+const ini=match[1].split(":");
+const fin=match[2].split(":");
+const minIni=parseInt(ini[0])*60+parseInt(ini[1]);
+const minFin=parseInt(fin[0])*60+parseInt(fin[1]);
+return minutos>=minIni&&minutos<=minFin;
 }
 
 async function buscarDatos(){
-
-cluster.clearLayers();
-
+const key=generarKey();
+if(cache.has(key)){pintar(cache.get(key));return;}
 const c=map.getCenter();
-const r=6000;
+const r=calcularRadio();
 
-const query=`[out:json];
-(node["shop"="tobacco"](around:${r},${c.lat},${c.lng}););
-out;`;
+const query=`[out:json][timeout:25];
+(
+node["shop"="tobacco"](around:${r},${c.lat},${c.lng});
+node["shop"~"supermarket|convenience|variety_store"](around:${r},${c.lat},${c.lng});
+node["amenity"="bar"](around:${r},${c.lat},${c.lng});
+node["amenity"="fuel"](around:${r},${c.lat},${c.lng});
+);out;`;
 
-try{
-const resp=await fetch("https://overpass-api.de/api/interpreter",{
-method:"POST",
-body:query
-});
+const resp=await fetch("https://overpass-api.de/api/interpreter",{method:"POST",body:query});
 const data=await resp.json();
-elementsData=data.elements||[];
-render();
-}catch(e){
-alert("Error cargando datos");
+cache.set(key,data.elements||[]);
+pintar(data.elements||[]);
 }
 
-}
-
-function render(){
-
+function pintar(elements){
 cluster.clearLayers();
 
-let lista=[...elementsData];
+let cE=0,cT=0,cS=0,cB=0,cG=0;
+const onlyOpen=document.getElementById("toggleOnlyOpen").checked;
+const greyClosed=document.getElementById("toggleGreyClosed").checked;
 
-const onlyOpen=document.getElementById("onlyOpen").checked;
-const greyClosed=document.getElementById("greyClosed").checked;
-const search=document.getElementById("searchName").value.toLowerCase();
+elements.forEach(p=>{
+if(!p.lat||!p.lon)return;
 
-if(search){
-lista=lista.filter(p=>p.tags?.name?.toLowerCase().includes(search));
-}
+let icon,tipo,visible=false;
 
-lista.forEach(p=>{
+if(p.tags?.shop==="tobacco"){icon=icons.estanco;tipo="Estanco";visible=filter.estanco;cE++;}
+else if(p.tags?.shop==="supermarket"){icon=icons.super;tipo="Super";visible=filter.super;cS++;}
+else if(p.tags?.amenity==="bar"){icon=icons.bar;tipo="Bar";visible=filter.bar;cB++;}
+else if(p.tags?.amenity==="fuel"){icon=icons.gas;tipo="Gasolinera";visible=filter.gas;cG++;}
+else{icon=icons.tienda;tipo="Tienda";visible=filter.tienda;cT++;}
 
-const horario=analizarHorario(p.tags?.opening_hours);
+if(!visible)return;
 
-if(onlyOpen && horario.estado===false) return;
+const opening=p.tags?.opening_hours||null;
+const estado=estaAbiertoAhora(opening);
 
-let icono=redIcon;
-if(horario.estado===false && greyClosed) icono=greyIcon;
+if(onlyOpen&&estado===false)return;
+if(estado===false&&greyClosed)icon=icons.closed;
 
-const marker=L.marker([p.lat,p.lon],{icon:icono});
+let estadoTxt="Horario desconocido";
+if(estado===true)estadoTxt="🟢 Abierto ahora";
+else if(estado===false)estadoTxt="🔴 Cerrado ahora";
+else if(opening)estadoTxt="Horario: "+opening;
+
+const nombre=p.tags?.name||p.tags?.brand||tipo;
+const id=p.id;
+
+const marker=L.marker([p.lat,p.lon],{icon});
 
 marker.bindPopup(`
-<b>${p.tags?.name||"Estanco"}</b><br>
-${horario.texto}
-<br><br>
-<a href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}" target="_blank">
-Cómo llegar
-</a>
+<b>${nombre}</b><br>
+${estadoTxt}<br><br>
+<a href="https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}" target="_blank">Ver en Maps</a><br>
+<a href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}" target="_blank">Cómo llegar</a><br><br>
+<button onclick="toggleFav('${id}','${nombre}','${p.lat}','${p.lon}')">
+${favoritos.find(f=>f.id==id)?"★ Quitar favorito":"☆ Añadir favorito"}
+</button>
 `);
 
 cluster.addLayer(marker);
-
 });
 
+document.getElementById("countEstanco").textContent=cE;
+document.getElementById("countTienda").textContent=cT;
+document.getElementById("countSuper").textContent=cS;
+document.getElementById("countBar").textContent=cB;
+document.getElementById("countGas").textContent=cG;
+
+actualizarFavoritos();
 }
 
-document.getElementById("searchBtn").onclick=async()=>{
+window.toggleFav=function(id,nombre,lat,lon){
+if(favoritos.find(f=>f.id==id)){
+favoritos=favoritos.filter(f=>f.id!=id);
+}else{
+favoritos.push({id,nombre,lat,lon});
+}
+localStorage.setItem("favoritos",JSON.stringify(favoritos));
+actualizarFavoritos();
+pintar(cache.get(generarKey())||[]);
+}
+
+function actualizarFavoritos(){
+const div=document.getElementById("favList");
+div.innerHTML="";
+favoritos.forEach(f=>{
+div.innerHTML+=`<div class="fav">★ ${f.nombre}</div>`;
+});
+}
+
+document.getElementById("searchButton").onclick=async()=>{
 const val=document.getElementById("address").value;
+if(!val)return;
 const resp=await fetch('https://nominatim.openstreetmap.org/search?format=json&q='+encodeURIComponent(val));
 const data=await resp.json();
-if(data.length) map.flyTo([data[0].lat,data[0].lon],14);
+if(data.length)map.flyTo([data[0].lat,data[0].lon],14);
+};
+
+map.on("moveend",()=>{
+document.getElementById("searchCenterButton").style.display="block";
+if(document.getElementById("toggleAutoSearch").checked){
+buscarDatos();
+}
+});
+
+document.getElementById("searchCenterButton").onclick=()=>{
+buscarDatos();
+document.getElementById("searchCenterButton").style.display="none";
 };
 
 document.getElementById("menuButton").onclick=()=>{
-document.getElementById("panel").classList.toggle("active");
+document.getElementById("sidebar").classList.toggle("active");
 };
 
-document.getElementById("onlyOpen").onchange=render;
-document.getElementById("greyClosed").onchange=render;
-document.getElementById("searchName").oninput=render;
+["Estanco","Tienda","Super","Bar","Gas"].forEach(tipo=>{
+document.getElementById("toggle"+tipo).onchange=e=>{
+filter[tipo.toLowerCase()]=e.target.checked;
+pintar(cache.get(generarKey())||[]);
+};
+});
 
-map.on("moveend",buscarDatos);
+document.getElementById("toggleOnlyOpen").onchange=()=>pintar(cache.get(generarKey())||[]);
+document.getElementById("toggleGreyClosed").onchange=()=>pintar(cache.get(generarKey())||[]);
 
 setTimeout(buscarDatos,1500);
 
 });
 </script>
-
 </body>
 </html>
