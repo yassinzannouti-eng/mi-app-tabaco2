@@ -76,7 +76,8 @@ html, body { height: 100%; margin: 0; font-family: -apple-system, BlinkMacSystem
   text-decoration: none !important; margin-top: 12px; font-weight: 600; font-size: 14px;
 }
 .horario-info { font-size: 12px; color: #636366; display: block; margin-top: 8px; line-height: 1.4; border-top: 1px solid #f2f2f7; padding-top: 8px; }
-.vape-info { font-size: 13px; font-weight: 600; margin-top: 6px; color: #34c759; } /* Verde para "sí vende" */
+.vape-info { font-size: 13px; font-weight: 600; margin-top: 6px; color: #34c759; }
+.extra-info { font-size: 12px; color: #007aff; margin-top: 6px; line-height: 1.3; }
 </style>
 </head>
 
@@ -121,6 +122,8 @@ const greyClosed = document.getElementById("greyClosed");
 let map, userLocation, markersLayer, userMarker, elementsData = [];
 let lastCenter = null;
 let lastZoom = null;
+let isAnimating = false;
+let autoSearchEnabled = true; // Para desactivar temporalmente al inicio o tras búsqueda manual
 
 // Cargar estado
 onlyOpen.checked = localStorage.getItem('onlyOpen') === 'true';
@@ -149,13 +152,12 @@ function getOpeningStatus(opening_hours_str) {
     }
 }
 
-/* ---------- ¿Vende vapers? (actualizado) ---------- */
+/* ---------- ¿Vende vapers? ---------- */
 function vendeVapers(tags) {
     if (!tags) return false;
     const shop = tags.shop;
     const amenity = tags.amenity;
 
-    // Casi todos estos tipos venden vapes en España
     if (shop === 'vape' || shop === 'e-cigarette' ||
         shop === 'tobacco' ||
         shop === 'supermarket' ||
@@ -201,14 +203,23 @@ function iniciarMapa(lat, lon) {
         radius: 9, color: "white", fillColor: "#007aff", fillOpacity: 0.9, weight: 3
     }).addTo(map);
 
+    // Detectar animaciones activas
+    map.on('movestart', () => { isAnimating = true; });
+    map.on('moveend', () => { isAnimating = false; });
+    map.on('zoomstart', () => { isAnimating = true; });
+    map.on('zoomend', () => { isAnimating = false; });
+
+    // Búsqueda automática con condiciones estrictas
     let searchTimeout;
-    map.on('moveend zoomend', () => {
+    const trySearch = () => {
+        if (!autoSearchEnabled || isAnimating) return;
+
         const currentCenter = map.getCenter();
         const currentZoom = map.getZoom();
 
-        const movedFar = !lastCenter || 
-                         currentCenter.distanceTo(lastCenter) > 150 || 
-                         Math.abs(currentZoom - lastZoom) > 0.5;
+        const movedFar = !lastCenter ||
+                         currentCenter.distanceTo(lastCenter) > 300 ||
+                         Math.abs(currentZoom - lastZoom) >= 1;
 
         if (movedFar) {
             clearTimeout(searchTimeout);
@@ -216,11 +227,16 @@ function iniciarMapa(lat, lon) {
                 lastCenter = currentCenter;
                 lastZoom = currentZoom;
                 buscarDatos();
-            }, 1200);
+            }, 1500); // 1.5 segundos de calma
         }
-    });
+    };
 
-    buscarDatos();
+    map.on('moveend zoomend', trySearch);
+
+    // Desactivar auto-search los primeros 8 segundos tras cargar
+    setTimeout(() => { autoSearchEnabled = true; }, 8000);
+
+    buscarDatos(); // Primera carga
 }
 
 function getVisibleRadius() {
@@ -228,14 +244,16 @@ function getVisibleRadius() {
     return Math.round(map.getCenter().distanceTo(bounds.getNorthEast()) * 1.2);
 }
 
-async function buscarDatos() {
+async function buscarDatos(silent = false) {
     if (!map) return;
 
     const c = map.getCenter();
     const radio = getVisibleRadius();
 
-    overlay.style.display = 'flex';
-    overlayText.textContent = 'Buscando locales cercanos...';
+    if (!silent) {
+        overlay.style.display = 'flex';
+        overlayText.textContent = 'Buscando locales cercanos...';
+    }
 
     const query = `[out:json][timeout:25];
     (
@@ -259,9 +277,9 @@ async function buscarDatos() {
         render();
     } catch (e) {
         console.error("Error al buscar:", e);
-        overlayText.textContent = 'Error al cargar datos';
+        if (!silent) overlayText.textContent = 'Error al cargar datos';
     } finally {
-        setTimeout(() => overlay.style.display = 'none', 800);
+        if (!silent) setTimeout(() => overlay.style.display = 'none', 800);
     }
 }
 
@@ -277,12 +295,12 @@ function render() {
 
         if (showOnlyOpen && status.known && !status.isOpen) return;
 
-        let color = "#8e8e93"; // gris default
-        if (p.tags?.shop === "tobacco") color = "#ff3b30";          // rojo estanco
-        else if (p.tags?.shop === "supermarket") color = "#34c759"; // verde super
-        else if (p.tags?.amenity === "fuel") color = "#9f47ff";     // morado gasolinera
-        else if (p.tags?.shop === "vape" || p.tags?.shop === "e-cigarette") color = "#5856d6"; // morado vape
-        else if (p.tags?.shop === "convenience") color = "#ff9500"; // naranja bazar
+        let color = "#8e8e93";
+        if (p.tags?.shop === "tobacco") color = "#ff3b30";
+        else if (p.tags?.shop === "supermarket") color = "#34c759";
+        else if (p.tags?.amenity === "fuel") color = "#9f47ff";
+        else if (p.tags?.shop === "vape" || p.tags?.shop === "e-cigarette") color = "#5856d6";
+        else if (p.tags?.shop === "convenience") color = "#ff9500";
 
         const opacity = (greyOut && !(status.known && status.isOpen)) ? 0.45 : 1.0;
 
@@ -293,6 +311,11 @@ function render() {
 
         const vende = vendeVapers(p.tags);
         const vapeText = vende ? '<div class="vape-info">✓ Probablemente vende vapers</div>' : '';
+
+        let extraInfo = '';
+        if (!status.known) {
+            extraInfo = '<div class="extra-info">ℹ️ Horario no disponible – verifica en Google Maps</div>';
+        }
 
         const pinIcon = L.divIcon({
             className: "custom-pin",
@@ -312,6 +335,7 @@ function render() {
                     <strong style="font-size:16px;">${nombre}</strong><br>
                     <span class="horario-info"><b>Horario:</b><br>${horarioEsp}</span>
                     ${vapeText}
+                    ${extraInfo}
                     <a href="${mapsUrl}" target="_blank" class="btn-maps">VER EN MAPS</a>
                 </div>
             `)
@@ -321,19 +345,30 @@ function render() {
 
 // Eventos
 document.getElementById("menuButton").onclick = () => document.getElementById("panel").classList.toggle("active");
-document.getElementById("pinBtn").onclick = () => map.flyTo([userLocation.lat, userLocation.lon], 17);
-document.getElementById("searchAreaBtn").onclick = buscarDatos;
+document.getElementById("pinBtn").onclick = () => {
+    autoSearchEnabled = false;
+    map.flyTo([userLocation.lat, userLocation.lon], 17);
+    setTimeout(() => { autoSearchEnabled = true; }, 3000);
+};
+
+document.getElementById("searchAreaBtn").onclick = () => {
+    autoSearchEnabled = false;
+    buscarDatos();
+    setTimeout(() => { autoSearchEnabled = true; }, 3000);
+};
 
 document.getElementById("searchBtn").onclick = async () => {
     const val = document.getElementById("address").value.trim();
     if (!val) return;
     try {
+        autoSearchEnabled = false;
         const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(val)}&limit=1`);
         const d = await r.json();
         if (d.length > 0) {
             map.setView([d[0].lat, d[0].lon], 16);
             buscarDatos();
         }
+        setTimeout(() => { autoSearchEnabled = true; }, 3000);
     } catch (e) { console.error(e); }
 };
 
