@@ -121,32 +121,39 @@ overlayText.innerHTML="La geolocalización requiere HTTPS.";
 return;
 }
 
+let map,userLocation,markersLayer,userMarker,elementsData=[];
+
+/* ---------- GEOLOCALIZACIÓN AUTOMÁTICA ---------- */
+
+async function iniciarGeolocalizacion(){
+
 if(!navigator.geolocation){
 overlayText.innerHTML="Tu navegador no soporta geolocalización.";
 return;
 }
 
-let map,userLocation,markersLayer,userMarker,elementsData=[];
+try{
 
-/* ---------- SOLICITAR UBICACIÓN ---------- */
+if(navigator.permissions){
+const permiso=await navigator.permissions.query({name:"geolocation"});
 
-async function solicitarUbicacion(){
+if(permiso.state==="denied"){
+overlayText.innerHTML=
+"Ubicación bloqueada.<br>Actívala en los ajustes del navegador.";
+retryBtn.style.display="block";
+return;
+}
+}
 
-overlayText.innerHTML="Solicitando acceso a tu ubicación...";
-retryBtn.style.display="none";
-
+/* Esto dispara el popup automáticamente si está en prompt */
 navigator.geolocation.getCurrentPosition(
 pos=>{
 iniciarMapa(pos.coords.latitude,pos.coords.longitude);
 },
 err=>{
-if(err.code===1){
-overlayText.innerHTML="Ubicación bloqueada.<br>Actívala en los ajustes del navegador.";
+overlayText.innerHTML=
+"No se pudo obtener la ubicación.";
 retryBtn.style.display="block";
-}else{
-overlayText.innerHTML="No se pudo obtener la ubicación.";
-retryBtn.style.display="block";
-}
 },
 {
 enableHighAccuracy:true,
@@ -155,21 +162,17 @@ maximumAge:0
 }
 );
 
+}catch(e){
+overlayText.innerHTML="Error al solicitar ubicación.";
 }
 
-retryBtn.onclick=solicitarUbicacion;
-
-/* Detectar cambio de permisos en tiempo real */
-if(navigator.permissions){
-try{
-const permiso=await navigator.permissions.query({name:"geolocation"});
-permiso.onchange=()=>{
-if(permiso.state==="granted"){
-solicitarUbicacion();
 }
+
+retryBtn.onclick=()=>{
+retryBtn.style.display="none";
+overlayText.innerHTML="Solicitando acceso a tu ubicación...";
+iniciarGeolocalizacion();
 };
-}catch(e){}
-}
 
 /* ---------- MAPA ---------- */
 
@@ -194,11 +197,6 @@ color:"#2563eb",
 fillColor:"#2563eb",
 fillOpacity:0.9
 }).addTo(map);
-
-navigator.geolocation.watchPosition(p=>{
-userLocation={lat:p.coords.latitude,lon:p.coords.longitude};
-userMarker.setLatLng([userLocation.lat,userLocation.lon]);
-},{enableHighAccuracy:true});
 
 buscarDatos();
 }
@@ -282,7 +280,7 @@ pinBtn.onclick=()=>map.flyTo([userLocation.lat,userLocation.lon],16);
 searchAreaBtn.onclick=buscarDatos;
 
 /* INICIO */
-solicitarUbicacion();
+iniciarGeolocalizacion();
 
 });
 </script>
