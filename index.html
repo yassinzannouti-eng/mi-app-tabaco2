@@ -57,19 +57,13 @@ let map;
 let service;
 let infowindow;
 let markers = [];
-let userLocation;
 
 function initMap() {
 
-  if (!navigator.geolocation) {
-    alert("Geolocalización no soportada.");
-    return;
-  }
-
   navigator.geolocation.getCurrentPosition(
-    position => {
+    function(position) {
 
-      userLocation = {
+      const userLocation = {
         lat: position.coords.latitude,
         lng: position.coords.longitude
       };
@@ -79,6 +73,7 @@ function initMap() {
         zoom: 15
       });
 
+      // Marcador usuario
       new google.maps.Marker({
         position: userLocation,
         map: map,
@@ -88,19 +83,19 @@ function initMap() {
       service = new google.maps.places.PlacesService(map);
       infowindow = new google.maps.InfoWindow();
 
-      // Esperar a que el mapa termine de cargar antes de buscar
-      google.maps.event.addListenerOnce(map, "idle", () => {
-        searchPlaces();
-      });
+      searchPlaces();
+
     },
-    error => {
-      alert("Error obteniendo ubicación: " + error.message);
+    function() {
+      alert("No se pudo obtener la ubicación.");
     }
   );
 }
 
 function clearMarkers() {
-  markers.forEach(marker => marker.setMap(null));
+  for (let i = 0; i < markers.length; i++) {
+    markers[i].setMap(null);
+  }
   markers = [];
 }
 
@@ -121,40 +116,43 @@ function searchPlaces() {
     openNow: openNow
   };
 
-  service.nearbySearch(request, (results, status) => {
+  service.nearbySearch(request, function(results, status) {
     if (status === google.maps.places.PlacesServiceStatus.OK) {
-      results.forEach(place => {
-        createMarker(place);
-        createCard(place);
-      });
+
+      for (let i = 0; i < results.length; i++) {
+        createMarker(results[i]);
+        createCard(results[i]);
+      }
+
     }
   });
 }
 
 function createMarker(place) {
+
   const marker = new google.maps.Marker({
-    map,
+    map: map,
     position: place.geometry.location
   });
 
   markers.push(marker);
 
-  marker.addListener("click", () => {
-    infowindow.setContent(`<strong>${place.name}</strong>`);
+  marker.addListener("click", function() {
+    infowindow.setContent("<strong>" + place.name + "</strong>");
     infowindow.open(map, marker);
   });
 }
 
 function createCard(place) {
 
-  const mapsUrl = `https://www.google.com/maps/place/?q=place_id:${place.place_id}`;
+  const mapsUrl = "https://www.google.com/maps/place/?q=place_id:" + place.place_id;
 
   service.getDetails(
     {
       placeId: place.place_id,
       fields: ["name", "formatted_address", "opening_hours"]
     },
-    (details, status) => {
+    function(details, status) {
 
       let horario = "No disponible";
       let estado = "";
@@ -163,9 +161,11 @@ function createCard(place) {
 
         if (details.opening_hours) {
 
-          estado = details.opening_hours.open_now
-            ? `<span class="open">Abierto ahora</span>`
-            : `<span class="closed">Cerrado</span>`;
+          if (details.opening_hours.open_now) {
+            estado = "<span class='open'>Abierto ahora</span>";
+          } else {
+            estado = "<span class='closed'>Cerrado</span>";
+          }
 
           if (details.opening_hours.weekday_text) {
             horario = details.opening_hours.weekday_text.join("<br>");
@@ -176,15 +176,12 @@ function createCard(place) {
       const card = document.createElement("div");
       card.className = "card";
 
-      card.innerHTML = `
-        <h3>${place.name}</h3>
-        <p>${details?.formatted_address || ""}</p>
-        <p>${estado}</p>
-        <p><strong>Horario:</strong><br>${horario}</p>
-        <button onclick="window.open('${mapsUrl}','_blank')">
-          Ver en Maps
-        </button>
-      `;
+      card.innerHTML =
+        "<h3>" + place.name + "</h3>" +
+        "<p>" + (details?.formatted_address || "") + "</p>" +
+        "<p>" + estado + "</p>" +
+        "<p><strong>Horario:</strong><br>" + horario + "</p>" +
+        "<button onclick=\"window.open('" + mapsUrl + "','_blank')\">Ver en Maps</button>";
 
       document.getElementById("results").appendChild(card);
     }
