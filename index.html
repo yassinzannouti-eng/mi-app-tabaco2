@@ -1,16 +1,81 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vaper Tracker ESTABLE</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+
+<style>
+html,body{height:100%;margin:0;font-family:Arial;}
+#map{height:100%;width:100%;}
+#menuButton{
+position:fixed;top:15px;left:15px;z-index:2000;
+background:white;border:none;padding:10px;border-radius:8px;
+box-shadow:0 3px 8px rgba(0,0,0,0.2);cursor:pointer;
+}
+#panel{
+position:fixed;top:0;left:-260px;width:240px;height:100%;
+background:white;z-index:2100;padding:20px;
+box-shadow:2px 0 15px rgba(0,0,0,0.2);
+transition:.3s;
+overflow:auto;
+}
+#panel.active{left:0;}
+.search{
+position:absolute;top:15px;left:50%;
+transform:translateX(-50%);
+z-index:1500;display:flex;
+background:white;border-radius:25px;
+box-shadow:0 4px 15px rgba(0,0,0,0.18);
+overflow:hidden;
+}
+.search input{padding:10px;border:none;outline:none;}
+.search button{padding:10px;border:none;background:#2563eb;color:white;}
+.badge{font-size:12px;padding:3px 6px;border-radius:8px;}
+.open{background:#22c55e;color:white;}
+.closed{background:#ef4444;color:white;}
+</style>
+</head>
+<body>
+
+<div id="panel">
+<h3>Filtros</h3>
+<label><input type="checkbox" id="onlyOpen"> Solo abiertos</label><br>
+<label><input type="checkbox" id="greyClosed" checked> Cerrados en gris</label>
+<hr>
+<input type="text" id="searchName" placeholder="Buscar por nombre">
+</div>
+
+<button id="menuButton">☰</button>
+
+<div class="search">
+<input type="text" id="address" placeholder="Buscar ciudad">
+<button id="searchBtn">🔍</button>
+</div>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
 <script>
 document.addEventListener("DOMContentLoaded",()=>{
 
 const map=L.map('map').setView([40.41,-3.70],6);
 
-L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{
-attribution:'©OpenStreetMap ©CARTO'
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{
+attribution:'©OpenStreetMap'
 }).addTo(map);
 
-let userLocation=null;
-let currentElements=[];
 const cluster=L.markerClusterGroup();
 map.addLayer(cluster);
+
+let userLocation=null;
+let elementsData=[];
 
 map.locate({enableHighAccuracy:true});
 map.on('locationfound',e=>{userLocation=e.latlng;});
@@ -23,104 +88,88 @@ iconSize:[25,41],iconAnchor:[12,41]
 });
 }
 
-const icons={
-normal:icon("red"),
-closed:icon("grey")
-};
-
-function distanciaKm(a,b,c,d){
-function r(x){return x*Math.PI/180;}
-const R=6371;
-const dLat=r(c-a);
-const dLon=r(d-b);
-const h=Math.sin(dLat/2)**2+
-Math.cos(r(a))*Math.cos(r(c))*
-Math.sin(dLon/2)**2;
-return R*2*Math.atan2(Math.sqrt(h),Math.sqrt(1-h));
-}
+const redIcon=icon("red");
+const greyIcon=icon("grey");
 
 function analizarHorario(opening){
-if(!opening)return {estado:null,texto:"⚠️ Sin horario registrado"};
+if(!opening)return {estado:null,texto:"Horario desconocido"};
 
 if(opening.includes("24/7"))
-return {estado:true,texto:"🟢 Abierto 24/7"};
+return {estado:true,texto:"<span class='badge open'>24/7</span>"};
 
-const ahora=new Date();
-const min=ahora.getHours()*60+ahora.getMinutes();
-const rangos=[...opening.matchAll(/(\d{2}:\d{2})-(\d{2}:\d{2})/g)];
+const now=new Date();
+const min=now.getHours()*60+now.getMinutes();
+const match=[...opening.matchAll(/(\d{2}:\d{2})-(\d{2}:\d{2})/g)];
 
-for(let r of rangos){
-const ini=r[1].split(":");
-const fin=r[2].split(":");
-const mi=parseInt(ini[0])*60+parseInt(ini[1]);
-const mf=parseInt(fin[0])*60+parseInt(fin[1]);
-
-if(min>=mi&&min<=mf){
-return {estado:true,texto:"🟢 Abierto ahora"};
-}
+for(let r of match){
+const i=r[1].split(":");
+const f=r[2].split(":");
+const mi=parseInt(i[0])*60+parseInt(i[1]);
+const mf=parseInt(f[0])*60+parseInt(f[1]);
+if(min>=mi&&min<=mf)
+return {estado:true,texto:"<span class='badge open'>Abierto</span>"};
 }
 
-return {estado:false,texto:"🔴 Cerrado ahora"};
+return {estado:false,texto:"<span class='badge closed'>Cerrado</span>"};
 }
 
-async function buscar(){
+async function buscarDatos(){
+
+cluster.clearLayers();
+
 const c=map.getCenter();
 const r=6000;
 
 const query=`[out:json];
-(node["shop"="tobacco"](around:${r},${c.lat},${c.lng}););out;`;
+(node["shop"="tobacco"](around:${r},${c.lat},${c.lng}););
+out;`;
 
-const resp=await fetch("https://overpass-api.de/api/interpreter",{method:"POST",body:query});
+try{
+const resp=await fetch("https://overpass-api.de/api/interpreter",{
+method:"POST",
+body:query
+});
 const data=await resp.json();
-
-currentElements=data.elements||[];
+elementsData=data.elements||[];
 render();
+}catch(e){
+alert("Error cargando datos");
+}
+
 }
 
 function render(){
 
 cluster.clearLayers();
 
-let lista=[...currentElements];
+let lista=[...elementsData];
 
-const onlyOpen=document.getElementById("toggleOnlyOpen").checked;
-const greyClosed=document.getElementById("toggleGreyClosed").checked;
-const searchText=document.getElementById("internalSearch").value.toLowerCase();
+const onlyOpen=document.getElementById("onlyOpen").checked;
+const greyClosed=document.getElementById("greyClosed").checked;
+const search=document.getElementById("searchName").value.toLowerCase();
 
-if(searchText){
-lista=lista.filter(p=>p.tags?.name?.toLowerCase().includes(searchText));
+if(search){
+lista=lista.filter(p=>p.tags?.name?.toLowerCase().includes(search));
 }
-
-lista=lista.map(p=>{
-const horario=analizarHorario(p.tags?.opening_hours);
-let dist=null;
-if(userLocation){
-dist=distanciaKm(userLocation.lat,userLocation.lng,p.lat,p.lon);
-}
-return {...p,horario,dist};
-});
-
-lista.sort((a,b)=>{
-if(a.horario.estado===true && b.horario.estado!==true) return -1;
-if(a.horario.estado!==true && b.horario.estado===true) return 1;
-return (a.dist||999)-(b.dist||999);
-});
 
 lista.forEach(p=>{
 
-if(onlyOpen && p.horario.estado===false) return;
+const horario=analizarHorario(p.tags?.opening_hours);
 
-let icono=icons.normal;
-if(p.horario.estado===false && greyClosed) icono=icons.closed;
+if(onlyOpen && horario.estado===false) return;
+
+let icono=redIcon;
+if(horario.estado===false && greyClosed) icono=greyIcon;
 
 const marker=L.marker([p.lat,p.lon],{icon:icono});
 
 marker.bindPopup(`
 <b>${p.tags?.name||"Estanco"}</b><br>
-${p.horario.texto}
-${p.dist?`<div style="font-size:12px;color:#555;">${p.dist.toFixed(2)} km</div>`:""}
+${horario.texto}
 <br><br>
-<a href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}" target="_blank">Cómo llegar</a>
+<a href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}" target="_blank">
+Cómo llegar
+</a>
 `);
 
 cluster.addLayer(marker);
@@ -129,13 +178,27 @@ cluster.addLayer(marker);
 
 }
 
-document.getElementById("internalSearch").oninput=render;
-document.getElementById("toggleOnlyOpen").onchange=render;
-document.getElementById("toggleGreyClosed").onchange=render;
+document.getElementById("searchBtn").onclick=async()=>{
+const val=document.getElementById("address").value;
+const resp=await fetch('https://nominatim.openstreetmap.org/search?format=json&q='+encodeURIComponent(val));
+const data=await resp.json();
+if(data.length) map.flyTo([data[0].lat,data[0].lon],14);
+};
 
-map.on("moveend",buscar);
+document.getElementById("menuButton").onclick=()=>{
+document.getElementById("panel").classList.toggle("active");
+};
 
-setTimeout(buscar,1500);
+document.getElementById("onlyOpen").onchange=render;
+document.getElementById("greyClosed").onchange=render;
+document.getElementById("searchName").oninput=render;
+
+map.on("moveend",buscarDatos);
+
+setTimeout(buscarDatos,1500);
 
 });
 </script>
+
+</body>
+</html>
