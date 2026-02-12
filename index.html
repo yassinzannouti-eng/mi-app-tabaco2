@@ -13,71 +13,26 @@
 html, body { height: 100%; margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f5f5f7; }
 #map { height: 100%; width: 100%; display: none; }
 
-#overlay {
-  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-  background: white; display: flex; flex-direction: column;
-  align-items: center; justify-content: center; z-index: 5000;
-  font-size: 18px; text-align: center; padding: 20px; gap: 20px;
-}
+#overlay { position:fixed; top:0; left:0; width:100%; height:100%; background:white; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:5000; font-size:18px; text-align:center; padding:20px; gap:20px; }
+#overlay button { padding:12px 24px; border:none; background:#007aff; color:white; border-radius:12px; cursor:pointer; font-weight:600; }
 
-#overlay button {
-  padding: 12px 24px; border: none; background: #007aff;
-  color: white; border-radius: 12px; cursor: pointer; font-weight: 600;
-}
+#menuButton { position:fixed; top:15px; left:15px; z-index:2000; background:rgba(255,255,255,0.9); border:none; padding:12px; border-radius:14px; box-shadow:0 4px 15px rgba(0,0,0,0.1); cursor:pointer; backdrop-filter:blur(5px); }
+#panel { position:fixed; top:0; left:-280px; width:260px; height:100%; background:white; z-index:2100; padding:25px; box-shadow:4px 0 20px rgba(0,0,0,0.1); transition:.3s cubic-bezier(0.4,0,0.2,1); overflow:auto; }
+#panel.active { left:0; }
 
-#menuButton {
-  position: fixed; top: 15px; left: 15px; z-index: 2000;
-  background: rgba(255,255,255,0.9); border: none; padding: 12px;
-  border-radius: 14px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-  cursor: pointer; backdrop-filter: blur(5px);
-}
+.search-bar { position:absolute; top:15px; left:50%; transform:translateX(-50%); z-index:1500; display:flex; background:rgba(255,255,255,0.95); border-radius:18px; box-shadow:0 8px 24px rgba(0,0,0,0.12); overflow:hidden; width:85%; max-width:420px; backdrop-filter:blur(10px); border:1px solid rgba(0,0,0,0.05); }
+.search-bar input { flex:1; padding:14px; border:none; outline:none; font-size:16px; background:transparent; }
+.search-bar button { padding:14px 20px; border:none; background:#007aff; color:white; cursor:pointer; }
 
-#panel {
-  position: fixed; top: 0; left: -280px; width: 260px; height: 100%;
-  background: white; z-index: 2100; padding: 25px;
-  box-shadow: 4px 0 20px rgba(0,0,0,0.1);
-  transition: .3s cubic-bezier(0.4, 0, 0.2, 1); overflow: auto;
-}
-#panel.active { left: 0; }
-
-.search-bar {
-  position: absolute; top: 15px; left: 50%;
-  transform: translateX(-50%);
-  z-index: 1500; display: flex; background: rgba(255,255,255,0.95);
-  border-radius: 18px; box-shadow: 0 8px 24px rgba(0,0,0,0.12);
-  overflow: hidden; width: 85%; max-width: 420px;
-  backdrop-filter: blur(10px); border: 1px solid rgba(0,0,0,0.05);
-}
-.search-bar input { flex: 1; padding: 14px; border: none; outline: none; font-size: 16px; background: transparent; }
-.search-bar button { padding: 14px 20px; border: none; background: #007aff; color: white; cursor: pointer; }
-
-.btn-pin {
-  position: absolute; bottom: 100px; right: 20px;
-  width: 55px; height: 55px; background: white;
-  border-radius: 50%; display: flex; align-items: center;
-  justify-content: center; font-size: 28px; color: #c00;
-  border: none; cursor: pointer; z-index: 1500;
-  box-shadow: 0 6px 16px rgba(0,0,0,0.15);
-}
-
-.btn-search-area {
-  position: absolute; bottom: 30px; right: 20px;
-  background: #007aff; color: white; border: none;
-  padding: 14px 22px; border-radius: 25px;
-  cursor: pointer; z-index: 1500; font-weight: 700;
-  box-shadow: 0 6px 20px rgba(0,122,255,0.3);
-}
+.btn-pin { position:absolute; bottom:100px; right:20px; width:55px; height:55px; background:white; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:28px; color:#c00; border:none; cursor:pointer; z-index:1500; box-shadow:0 6px 16px rgba(0,0,0,0.15); }
+.btn-search-area { position:absolute; bottom:30px; right:20px; background:#007aff; color:white; border:none; padding:14px 22px; border-radius:25px; cursor:pointer; z-index:1500; font-weight:700; box-shadow:0 6px 20px rgba(0,122,255,0.3); }
 
 /* Popups */
-.popup-container { text-align: center; min-width: 220px; padding: 8px; }
-.btn-maps { 
-  display: block; background: #007aff; color: white !important; 
-  text-align: center; padding: 12px; border-radius: 12px; 
-  text-decoration: none !important; margin-top: 12px; font-weight: 600; font-size: 14px;
-}
-.horario-info { font-size: 12px; color: #636366; display: block; margin-top: 8px; line-height: 1.4; border-top: 1px solid #f2f2f7; padding-top: 8px; }
-.vape-info { font-size: 13px; font-weight: 600; margin-top: 6px; color: #34c759; }
-.extra-info { font-size: 12px; color: #007aff; margin-top: 6px; line-height: 1.3; }
+.popup-container { text-align:center; min-width:240px; padding:8px; }
+.btn-maps { display:block; background:#007aff; color:white !important; text-align:center; padding:12px; border-radius:12px; text-decoration:none !important; margin-top:12px; font-weight:600; font-size:14px; }
+.horario-info { font-size:12px; color:#636366; display:block; margin-top:8px; line-height:1.4; border-top:1px solid #f2f2f7; padding-top:8px; }
+.vape-info { font-size:13px; font-weight:600; margin-top:6px; color:#34c759; }
+.extra-info { font-size:12px; color:#007aff; margin-top:6px; line-height:1.3; }
 </style>
 </head>
 
@@ -130,6 +85,20 @@ let cachedRadius = 0;
 // Cargar estado
 onlyOpen.checked = localStorage.getItem('onlyOpen') === 'true';
 greyClosed.checked = localStorage.getItem('greyClosed') !== 'false';
+
+/* ---------- NOMBRE POR DEFECTO ---------- */
+function getDefaultName(tags) {
+    if (tags.shop === "tobacco") return "Estanco";
+    if (tags.shop === "supermarket") return "Supermercado";
+    if (tags.amenity === "fuel") return "Gasolinera";
+    if (tags.shop === "convenience") return "Tienda de conveniencia";
+    if (tags.shop === "vape" || tags.shop === "e-cigarette") return "Tienda de vapers";
+    if (tags.amenity === "bar") return "Bar";
+    if (tags.amenity === "pub") return "Pub";
+    if (tags.amenity === "restaurant") return "Restaurante";
+    if (tags.amenity === "cafe") return "Cafetería";
+    return "Local";
+}
 
 /* ---------- TRADUCTOR DE HORARIOS ---------- */
 function traducirHorario(txt) {
@@ -204,21 +173,18 @@ function iniciarMapa(lat, lon) {
     let searchTimeout;
     map.on('moveend zoomend', () => {
         const now = Date.now();
-        if (now - lastSearchTime < 8000) return; // cooldown 8 segundos
+        if (now - lastSearchTime < 8000) return;
 
         const currentCenter = map.getCenter();
         const currentZoom = map.getZoom();
 
-        // Reutilizar cache si no nos hemos movido mucho
         if (cachedData && cachedCenter && currentCenter.distanceTo(cachedCenter) < cachedRadius * 0.7) {
             elementsData = cachedData;
             render();
             return;
         }
 
-        const movedFar = !lastCenter ||
-                         currentCenter.distanceTo(lastCenter) > 500 ||
-                         Math.abs(currentZoom - lastZoom) >= 1;
+        const movedFar = !lastCenter || currentCenter.distanceTo(lastCenter) > 500 || Math.abs(currentZoom - lastZoom) >= 1;
 
         if (movedFar) {
             clearTimeout(searchTimeout);
@@ -226,12 +192,11 @@ function iniciarMapa(lat, lon) {
                 lastCenter = currentCenter;
                 lastZoom = currentZoom;
                 lastSearchTime = now;
-                buscarDatos(true); // silent = true → sin overlay
-            }, 3000); // 3 segundos sin movimiento
+                buscarDatos(true);
+            }, 3000);
         }
     });
 
-    // Primera carga con overlay
     buscarDatos(false);
 }
 
@@ -262,6 +227,8 @@ async function buscarDatos(showOverlay = false) {
               node["shop"="e-cigarette"](around:${radio},${c.lat},${c.lng});
               node["amenity"="fuel"](around:${radio},${c.lat},${c.lng});
               node["shop"="supermarket"](around:${radio},${c.lat},${c.lng});
+              node["amenity"="bar"](around:${radio},${c.lat},${c.lng});
+              node["amenity"="pub"](around:${radio},${c.lat},${c.lng});
             );
             out;`)
         });
@@ -271,7 +238,6 @@ async function buscarDatos(showOverlay = false) {
         const data = await resp.json();
         elementsData = data.elements || [];
 
-        // Guardar en cache
         cachedData = elementsData;
         cachedCenter = c;
         cachedRadius = radio;
@@ -284,9 +250,7 @@ async function buscarDatos(showOverlay = false) {
             setTimeout(() => overlay.style.display = 'none', 2000);
         }
     } finally {
-        if (showOverlay) {
-            setTimeout(() => overlay.style.display = 'none', 800);
-        }
+        if (showOverlay) setTimeout(() => overlay.style.display = 'none', 800);
     }
 }
 
@@ -303,24 +267,40 @@ function render() {
         if (showOnlyOpen && status.known && !status.isOpen) return;
 
         let color = "#8e8e93";
+        let defaultName = getDefaultName(p.tags);
+        let extraInfo = "";
+
         if (p.tags?.shop === "tobacco") color = "#ff3b30";
         else if (p.tags?.shop === "supermarket") color = "#34c759";
         else if (p.tags?.amenity === "fuel") color = "#9f47ff";
         else if (p.tags?.shop === "vape" || p.tags?.shop === "e-cigarette") color = "#5856d6";
         else if (p.tags?.shop === "convenience") color = "#ff9500";
+        else if (p.tags?.amenity === "bar" || p.tags?.amenity === "pub") {
+            color = "#FF6B6B"; // rojo suave para bares/pubs
+            extraInfo = '<div class="extra-info">ℹ️ Puede tener máquina de tabaco y/o vapers (muy común en bares con retransmisiones de fútbol o juegos recreativos) – verifica en el local o Google Maps</div>';
+        }
 
         const opacity = (greyOut && !(status.known && status.isOpen)) ? 0.65 : 1.0;
 
+        let nombre = p.tags?.name || defaultName;
+
+        let queryParts = [nombre];
+        if (p.tags["addr:street"]) queryParts.push(p.tags["addr:street"]);
+        if (p.tags["addr:housenumber"]) queryParts.push(p.tags["addr:housenumber"]);
+        if (p.tags["addr:city"]) queryParts.push(p.tags["addr:city"]);
+        const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(queryParts.join(" "))}`;
+
         const horarioEsp = traducirHorario(horarioRaw);
-        const nombre = p.tags?.name || "Local";
-
-        const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(nombre + " " + (p.tags["addr:city"] || p.tags["addr:street"] || ""))}`;
-
         const vende = vendeVapers(p.tags);
         const vapeText = vende ? '<div class="vape-info">✓ Probablemente vende vapers</div>' : '';
 
-        let extraInfo = '';
-        if (!status.known) {
+        if (p.tags?.shop === "supermarket" && !status.known) {
+            let note = 'Horario habitual aprox. 9:00-21:30 (verifica en Google Maps)';
+            const nameLower = nombre.toLowerCase();
+            if (nameLower.includes('día') || nameLower.includes('dia')) note = 'Día: la mayoría abre 9:00-21:30 (verifica en Google Maps)';
+            if (nameLower.includes('maskom')) note = 'Maskom: horarios variables (verifica en Google Maps)';
+            extraInfo = `<div class="extra-info">ℹ️ ${note}</div>`;
+        } else if (!status.known && !extraInfo) {
             extraInfo = '<div class="extra-info">ℹ️ Horario no disponible – verifica en Google Maps</div>';
         }
 
@@ -353,8 +333,7 @@ function render() {
 // Eventos
 document.getElementById("menuButton").onclick = () => document.getElementById("panel").classList.toggle("active");
 document.getElementById("pinBtn").onclick = () => map.flyTo([userLocation.lat, userLocation.lon], 17);
-document.getElementById("searchAreaBtn").onclick = () => buscarDatos(false); // muestra overlay
-
+document.getElementById("searchAreaBtn").onclick = () => buscarDatos(false);
 document.getElementById("searchBtn").onclick = async () => {
     const val = document.getElementById("address").value.trim();
     if (!val) return;
@@ -363,19 +342,13 @@ document.getElementById("searchBtn").onclick = async () => {
         const d = await r.json();
         if (d.length > 0) {
             map.setView([d[0].lat, d[0].lon], 16);
-            buscarDatos(false); // muestra overlay
+            buscarDatos(false);
         }
     } catch (e) { console.error(e); }
 };
 
-onlyOpen.addEventListener('change', () => {
-    localStorage.setItem('onlyOpen', onlyOpen.checked);
-    render();
-});
-greyClosed.addEventListener('change', () => {
-    localStorage.setItem('greyClosed', greyClosed.checked);
-    render();
-});
+onlyOpen.addEventListener('change', () => { localStorage.setItem('onlyOpen', onlyOpen.checked); render(); });
+greyClosed.addEventListener('change', () => { localStorage.setItem('greyClosed', greyClosed.checked); render(); });
 
 iniciarGeolocalizacion();
 
