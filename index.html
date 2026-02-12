@@ -1,184 +1,275 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Localizador de Estancos</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+<style>
+html, body {height:100%; margin:0; font-family:Arial, sans-serif;}
+#map {height:100%; width:100%;}
+
+.search-bar{
+position:absolute;
+top:15px;
+left:50%;
+transform:translateX(-50%);
+z-index:1500;
+display:flex;
+background:white;
+border-radius:25px;
+box-shadow:0 4px 15px rgba(0,0,0,0.2);
+overflow:hidden;
+width:85%;
+max-width:400px;
+}
+
+.search-bar input{
+flex:1;
+padding:10px;
+border:none;
+outline:none;
+}
+
+.search-bar button{
+padding:10px;
+border:none;
+background:#2563eb;
+color:white;
+cursor:pointer;
+}
+
+.btn-pin{
+position:absolute;
+bottom:100px;
+right:20px;
+z-index:1500;
+width:50px;
+height:50px;
+background:#2563eb;
+border-radius:50%;
+display:flex;
+align-items:center;
+justify-content:center;
+box-shadow:0 4px 12px rgba(0,0,0,0.3);
+border:none;
+cursor:pointer;
+color:white;
+font-size:22px;
+}
+
+.btn-search-area{
+position:absolute;
+bottom:30px;
+right:20px;
+z-index:1500;
+background:#2563eb;
+border:none;
+padding:10px 15px;
+border-radius:20px;
+color:white;
+cursor:pointer;
+box-shadow:0 3px 10px rgba(0,0,0,0.3);
+}
+
+#filters{
+position:absolute;
+bottom:30px;
+left:50%;
+transform:translateX(-50%);
+background:rgba(255,255,255,0.95);
+padding:10px 15px;
+border-radius:12px;
+box-shadow:0 3px 10px rgba(0,0,0,0.25);
+display:flex;
+gap:15px;
+z-index:1500;
+font-size:14px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="search-bar">
+<input type="text" id="address" placeholder="Buscar ciudad o zona">
+<button id="searchBtn">🔍</button>
+</div>
+
+<button class="btn-pin" id="pinBtn">📍</button>
+<button class="btn-search-area" id="searchAreaBtn">Buscar en esta zona</button>
+
+<div id="filters">
+<label><input type="checkbox" id="fEstanco" checked> 🔴 Estanco</label>
+<label><input type="checkbox" id="fSuper" checked> 🟢 Supermercado</label>
+<label><input type="checkbox" id="fBazar" checked> 🟣 Bazar</label>
+<label><input type="checkbox" id="fGas" checked> 🟡 Gasolinera</label>
+</div>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
 <script>
 document.addEventListener("DOMContentLoaded",()=>{
 
 let userLocation=null;
 let elementsData=[];
-let mapaListo=false;
+let markersLayer=L.layerGroup();
 
-const map=L.map('map',{preferCanvas:true})
-.setView([40.4168,-3.7038],13);
+const map=L.map('map',{zoomControl:false});
+L.control.zoom({position:'bottomright'}).addTo(map);
 
 L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{
-  attribution:'©OpenStreetMap ©CARTO'
+attribution:'©OpenStreetMap ©CARTO'
 }).addTo(map);
 
-const markersLayer=L.layerGroup().addTo(map);
+map.addLayer(markersLayer);
 
 const userMarker=L.circleMarker([0,0],{
-  radius:8,
-  color:"#2563eb",
-  fillColor:"#2563eb",
-  fillOpacity:0.9
+radius:8,
+color:"#2563eb",
+fillColor:"#2563eb",
+fillOpacity:0.9
 }).addTo(map);
 
-/* =========================
-   ICONOS
-========================= */
+/* ========= ICONOS ========= */
 
-function icon(color){
-  return L.icon({
-    iconUrl:`https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
-    shadowUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-    iconSize:[25,41],
-    iconAnchor:[12,41]
-  });
+function createIcon(color){
+return L.icon({
+iconUrl:`https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
+shadowUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+iconSize:[25,41],
+iconAnchor:[12,41]
+});
 }
 
 const icons={
-  estanco:icon("red"),
-  supermercado:icon("green"),
-  bazar:icon("violet"),
-  gasolinera:icon("yellow")
+estanco:createIcon("red"),
+super:createIcon("green"),
+bazar:createIcon("violet"),
+gas:createIcon("yellow")
 };
 
-/* =========================
-   GEOLOCALIZACIÓN
-========================= */
+/* ========= GEOLOCALIZACIÓN PRIORITARIA ========= */
+
+function iniciarMapa(lat,lon){
+userLocation={lat,lon};
+map.setView([lat,lon],15);
+userMarker.setLatLng([lat,lon]);
+buscarDatos();
+}
 
 if(navigator.geolocation){
-  navigator.geolocation.getCurrentPosition(pos=>{
-    const lat=pos.coords.latitude;
-    const lon=pos.coords.longitude;
-    userLocation={lat,lon};
-    map.setView([lat,lon],15);
-    userMarker.setLatLng([lat,lon]);
-    mapaListo=true;
-    buscarDatos();
-  });
+navigator.geolocation.getCurrentPosition(pos=>{
+iniciarMapa(pos.coords.latitude,pos.coords.longitude);
+},()=>{
+// Ubicación estimada por IP (ligero)
+fetch("https://ipapi.co/json/")
+.then(r=>r.json())
+.then(data=>iniciarMapa(data.latitude,data.longitude));
+});
 }
 
-/* =========================
-   FILTROS
-========================= */
+/* ========= FILTROS ========= */
 
-let filtros={
-  estanco:true,
-  supermercado:true,
-  bazar:true,
-  gasolinera:true
+function filtrosActivos(){
+return {
+estanco:document.getElementById("fEstanco").checked,
+super:document.getElementById("fSuper").checked,
+bazar:document.getElementById("fBazar").checked,
+gas:document.getElementById("fGas").checked
 };
-
-document.getElementById("toggleEstanco").onchange=e=>{filtros.estanco=e.target.checked; render();}
-document.getElementById("toggleSuper").onchange=e=>{filtros.supermercado=e.target.checked; render();}
-document.getElementById("toggleBazar").onchange=e=>{filtros.bazar=e.target.checked; render();}
-document.getElementById("toggleGas").onchange=e=>{filtros.gasolinera=e.target.checked; render();}
-
-/* =========================
-   SERVIDORES OVERPASS
-========================= */
-
-const endpoints=[
-  "https://overpass-api.de/api/interpreter",
-  "https://overpass.kumi.systems/api/interpreter",
-  "https://overpass.openstreetmap.ru/api/interpreter"
-];
-
-async function fetchOverpass(query){
-
-  for(let url of endpoints){
-    try{
-      const resp=await fetch(url,{method:"POST",body:query});
-      if(resp.ok){
-        return await resp.json();
-      }
-    }catch(e){
-      continue;
-    }
-  }
-
-  throw new Error("Todos los servidores Overpass fallaron");
 }
 
-/* =========================
-   BUSCAR DATOS (BBox real)
-========================= */
+document.querySelectorAll("#filters input").forEach(el=>{
+el.onchange=render;
+});
+
+/* ========= BUSCAR DATOS OPTIMIZADO ========= */
 
 async function buscarDatos(){
 
-  if(!mapaListo) return;
+const zoom=map.getZoom();
+const radio=zoom>=16?2000:zoom>=14?4000:6000;
+const c=map.getCenter();
 
-  if(map.getZoom()<13){
-    markersLayer.clearLayers();
-    return;
-  }
+const query=`[out:json][timeout:20];
+(
+node["shop"="tobacco"](around:${radio},${c.lat},${c.lng});
+node["shop"="supermarket"](around:${radio},${c.lat},${c.lng});
+node["shop"="variety_store"](around:${radio},${c.lat},${c.lng});
+node["amenity"="fuel"](around:${radio},${c.lat},${c.lng});
+);
+out;`;
 
-  const b=map.getBounds();
-
-  const query=`
-  [out:json][timeout:15];
-  (
-    node["shop"="tobacco"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});
-    node["shop"="supermarket"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});
-    node["shop"="variety_store"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});
-    node["amenity"="fuel"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});
-  );
-  out body;
-  `;
-
-  try{
-    const data=await fetchOverpass(query);
-    elementsData=data.elements||[];
-    render();
-  }catch(e){
-    console.log(e);
-  }
+try{
+const resp=await fetch("https://overpass-api.de/api/interpreter",{
+method:"POST",
+body:query
+});
+const data=await resp.json();
+elementsData=data.elements||[];
+render();
+}catch(e){
+console.log("Error Overpass",e);
+}
 }
 
-/* =========================
-   RENDER
-========================= */
+/* ========= RENDER ========= */
 
 function render(){
+markersLayer.clearLayers();
+const filtros=filtrosActivos();
 
-  markersLayer.clearLayers();
+elementsData.forEach(p=>{
 
-  for(let p of elementsData){
+let tipo=null;
 
-    let tipo=null;
+if(p.tags?.shop==="tobacco") tipo="estanco";
+else if(p.tags?.shop==="supermarket") tipo="super";
+else if(p.tags?.shop==="variety_store") tipo="bazar";
+else if(p.tags?.amenity==="fuel") tipo="gas";
 
-    if(p.tags?.shop==="tobacco") tipo="estanco";
-    else if(p.tags?.shop==="supermarket") tipo="supermercado";
-    else if(p.tags?.shop==="variety_store") tipo="bazar";
-    else if(p.tags?.amenity==="fuel") tipo="gasolinera";
+if(!tipo || !filtros[tipo]) return;
 
-    if(!tipo || !filtros[tipo]) continue;
+const popup=`
+<b>${p.tags?.name||tipo}</b><br>
+<a href="https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}" target="_blank">
+Ver en Maps</a>
+`;
 
-    const popup=`
-      <b>${p.tags?.name||tipo}</b><br>
-      <a href="https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}" target="_blank">
-      Ver en Maps</a>
-    `;
+const marker=L.marker([p.lat,p.lon],{icon:icons[tipo]})
+.bindPopup(popup);
 
-    L.marker([p.lat,p.lon],{icon:icons[tipo]})
-      .bindPopup(popup)
-      .addTo(markersLayer);
-  }
+markersLayer.addLayer(marker);
+
+});
 }
 
-/* =========================
-   BOTONES
-========================= */
+/* ========= BOTONES ========= */
 
-document.getElementById("locateBtn").onclick=()=>{
-  if(userLocation) map.flyTo(userLocation,16);
+document.getElementById("pinBtn").onclick=()=>{
+if(userLocation) map.flyTo(userLocation,16);
 };
 
 document.getElementById("searchAreaBtn").onclick=buscarDatos;
 
-map.on("moveend",()=>{
-  clearTimeout(window.moveTimer);
-  window.moveTimer=setTimeout(buscarDatos,500);
-});
+document.getElementById("searchBtn").onclick=async()=>{
+const val=document.getElementById("address").value;
+if(!val) return;
+const resp=await fetch('https://nominatim.openstreetmap.org/search?format=json&q='+encodeURIComponent(val));
+const data=await resp.json();
+if(data.length){
+map.flyTo([data[0].lat,data[0].lon],15);
+buscarDatos();
+}
+};
 
 });
-      </script>
+</script>
+
+</body>
+</html>
