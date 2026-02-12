@@ -8,15 +8,11 @@
 <style>
 body { margin:0; font-family:Arial, sans-serif; }
 #map { height:60vh; width:100%; }
-.controls {
-  padding:10px;
-  background:#fff;
-}
+.controls { padding:10px; background:#fff; }
 select, button, label {
   width:100%;
   padding:8px;
   margin:5px 0;
-  font-size:14px;
 }
 #results {
   padding:10px;
@@ -27,7 +23,6 @@ select, button, label {
   border-bottom:1px solid #ddd;
   padding:10px 0;
 }
-.card h3 { margin:5px 0; }
 .open { color:green; font-weight:bold; }
 .closed { color:red; font-weight:bold; }
 </style>
@@ -37,7 +32,6 @@ select, button, label {
 
 <div class="controls">
 
-  <!-- FILTRO PRINCIPAL -->
   <select id="typeFilter">
     <option value="restaurant">Restaurantes</option>
     <option value="bar">Bares</option>
@@ -46,18 +40,12 @@ select, button, label {
     <option value="supermarket">Supermercados</option>
   </select>
 
-  <button onclick="searchPlaces()">Buscar en esta área</button>
-
-  <!-- FILTROS EXTRA ABAJO -->
   <label>
     <input type="checkbox" id="openNowFilter">
     Solo abiertos ahora
   </label>
 
-  <label>
-    <input type="checkbox" id="miscFilter">
-    Incluir Miscelánea (bazares, tiendas varias)
-  </label>
+  <button id="searchBtn">Buscar en esta área</button>
 
 </div>
 
@@ -69,13 +57,19 @@ let map;
 let service;
 let infowindow;
 let markers = [];
+let userLocation;
 
 function initMap() {
+
+  if (!navigator.geolocation) {
+    alert("Geolocalización no soportada.");
+    return;
+  }
 
   navigator.geolocation.getCurrentPosition(
     position => {
 
-      const userLocation = {
+      userLocation = {
         lat: position.coords.latitude,
         lng: position.coords.longitude
       };
@@ -88,16 +82,19 @@ function initMap() {
       new google.maps.Marker({
         position: userLocation,
         map: map,
-        icon: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png"
+        icon: "https://maps.google.com/mapfiles/ms/icons/blue-dot.png"
       });
 
       service = new google.maps.places.PlacesService(map);
       infowindow = new google.maps.InfoWindow();
 
-      searchPlaces();
+      // Esperar a que el mapa termine de cargar antes de buscar
+      google.maps.event.addListenerOnce(map, "idle", () => {
+        searchPlaces();
+      });
     },
-    () => {
-      alert("No se pudo obtener tu ubicación.");
+    error => {
+      alert("Error obteniendo ubicación: " + error.message);
     }
   );
 }
@@ -109,24 +106,20 @@ function clearMarkers() {
 
 function searchPlaces() {
 
-  if (!map.getBounds()) return;
+  if (!map) return;
 
   clearMarkers();
   document.getElementById("results").innerHTML = "";
 
   const selectedType = document.getElementById("typeFilter").value;
   const openNow = document.getElementById("openNowFilter").checked;
-  const includeMisc = document.getElementById("miscFilter").checked;
 
-  let request = {
-    bounds: map.getBounds(),
+  const request = {
+    location: map.getCenter(),
+    radius: 1500,
     type: selectedType,
     openNow: openNow
   };
-
-  if (includeMisc) {
-    request.keyword = "bazar miscelánea tienda varios";
-  }
 
   service.nearbySearch(request, (results, status) => {
     if (status === google.maps.places.PlacesServiceStatus.OK) {
@@ -159,7 +152,7 @@ function createCard(place) {
   service.getDetails(
     {
       placeId: place.place_id,
-      fields: ["name", "opening_hours", "formatted_address"]
+      fields: ["name", "formatted_address", "opening_hours"]
     },
     (details, status) => {
 
@@ -170,11 +163,9 @@ function createCard(place) {
 
         if (details.opening_hours) {
 
-          if (details.opening_hours.open_now) {
-            estado = `<span class="open">Abierto ahora</span>`;
-          } else {
-            estado = `<span class="closed">Cerrado</span>`;
-          }
+          estado = details.opening_hours.open_now
+            ? `<span class="open">Abierto ahora</span>`
+            : `<span class="closed">Cerrado</span>`;
 
           if (details.opening_hours.weekday_text) {
             horario = details.opening_hours.weekday_text.join("<br>");
@@ -200,9 +191,9 @@ function createCard(place) {
   );
 }
 
+document.getElementById("searchBtn").addEventListener("click", searchPlaces);
 document.getElementById("typeFilter").addEventListener("change", searchPlaces);
 document.getElementById("openNowFilter").addEventListener("change", searchPlaces);
-document.getElementById("miscFilter").addEventListener("change", searchPlaces);
 
 </script>
 
