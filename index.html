@@ -11,13 +11,12 @@ body { margin:0; font-family:Arial, sans-serif; }
 .controls {
   padding:10px;
   background:#fff;
-  position:relative;
-  z-index:2;
 }
-select, button {
+select, button, label {
+  width:100%;
   padding:8px;
   margin:5px 0;
-  width:100%;
+  font-size:14px;
 }
 #results {
   padding:10px;
@@ -29,23 +28,37 @@ select, button {
   padding:10px 0;
 }
 .card h3 { margin:5px 0; }
-.card p { margin:3px 0; font-size:14px; }
+.open { color:green; font-weight:bold; }
+.closed { color:red; font-weight:bold; }
 </style>
 </head>
 
 <body>
 
 <div class="controls">
+
+  <!-- FILTRO PRINCIPAL -->
   <select id="typeFilter">
     <option value="restaurant">Restaurantes</option>
     <option value="bar">Bares</option>
     <option value="cafe">Cafeterías</option>
     <option value="store">Tiendas</option>
     <option value="supermarket">Supermercados</option>
-    <option value="misc">Miscelánea</option>
   </select>
 
-  <button onclick="searchThisArea()">Buscar en esta área</button>
+  <button onclick="searchPlaces()">Buscar en esta área</button>
+
+  <!-- FILTROS EXTRA ABAJO -->
+  <label>
+    <input type="checkbox" id="openNowFilter">
+    Solo abiertos ahora
+  </label>
+
+  <label>
+    <input type="checkbox" id="miscFilter">
+    Incluir Miscelánea (bazares, tiendas varias)
+  </label>
+
 </div>
 
 <div id="map"></div>
@@ -61,6 +74,7 @@ function initMap() {
 
   navigator.geolocation.getCurrentPosition(
     position => {
+
       const userLocation = {
         lat: position.coords.latitude,
         lng: position.coords.longitude
@@ -71,13 +85,19 @@ function initMap() {
         zoom: 15
       });
 
+      new google.maps.Marker({
+        position: userLocation,
+        map: map,
+        icon: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png"
+      });
+
       service = new google.maps.places.PlacesService(map);
       infowindow = new google.maps.InfoWindow();
 
       searchPlaces();
     },
     () => {
-      alert("No se pudo obtener la ubicación.");
+      alert("No se pudo obtener tu ubicación.");
     }
   );
 }
@@ -88,25 +108,31 @@ function clearMarkers() {
 }
 
 function searchPlaces() {
+
+  if (!map.getBounds()) return;
+
   clearMarkers();
   document.getElementById("results").innerHTML = "";
 
-  let selectedType = document.getElementById("typeFilter").value;
+  const selectedType = document.getElementById("typeFilter").value;
+  const openNow = document.getElementById("openNowFilter").checked;
+  const includeMisc = document.getElementById("miscFilter").checked;
 
   let request = {
     bounds: map.getBounds(),
-    type: selectedType === "misc" ? [] : [selectedType]
+    type: selectedType,
+    openNow: openNow
   };
 
-  if (selectedType === "misc") {
-    request.keyword = "tienda miscelánea bazar varios";
+  if (includeMisc) {
+    request.keyword = "bazar miscelánea tienda varios";
   }
 
   service.nearbySearch(request, (results, status) => {
     if (status === google.maps.places.PlacesServiceStatus.OK) {
       results.forEach(place => {
         createMarker(place);
-        addResultCard(place);
+        createCard(place);
       });
     }
   });
@@ -120,17 +146,13 @@ function createMarker(place) {
 
   markers.push(marker);
 
-  google.maps.event.addListener(marker, "click", () => {
+  marker.addListener("click", () => {
     infowindow.setContent(`<strong>${place.name}</strong>`);
     infowindow.open(map, marker);
   });
 }
 
-function addResultCard(place) {
-  const resultsDiv = document.getElementById("results");
-
-  const card = document.createElement("div");
-  card.className = "card";
+function createCard(place) {
 
   const mapsUrl = `https://www.google.com/maps/place/?q=place_id:${place.place_id}`;
 
@@ -141,46 +163,47 @@ function addResultCard(place) {
     },
     (details, status) => {
 
-      let horarioHTML = "Horario no disponible";
+      let horario = "No disponible";
+      let estado = "";
 
       if (status === google.maps.places.PlacesServiceStatus.OK) {
+
         if (details.opening_hours) {
-          if (details.opening_hours.open_now &&
-              details.opening_hours.weekday_text &&
-              details.opening_hours.weekday_text.length === 7) {
 
-            const es247 = details.opening_hours.weekday_text
-              .every(day => day.includes("24 horas"));
+          if (details.opening_hours.open_now) {
+            estado = `<span class="open">Abierto ahora</span>`;
+          } else {
+            estado = `<span class="closed">Cerrado</span>`;
+          }
 
-            if (es247) {
-              horarioHTML = "Abierto 24/7";
-            } else {
-              horarioHTML = details.opening_hours.weekday_text.join("<br>");
-            }
-
+          if (details.opening_hours.weekday_text) {
+            horario = details.opening_hours.weekday_text.join("<br>");
           }
         }
       }
 
+      const card = document.createElement("div");
+      card.className = "card";
+
       card.innerHTML = `
         <h3>${place.name}</h3>
         <p>${details?.formatted_address || ""}</p>
-        <p><strong>Horario:</strong><br>${horarioHTML}</p>
+        <p>${estado}</p>
+        <p><strong>Horario:</strong><br>${horario}</p>
         <button onclick="window.open('${mapsUrl}','_blank')">
           Ver en Maps
         </button>
       `;
 
-      resultsDiv.appendChild(card);
+      document.getElementById("results").appendChild(card);
     }
   );
 }
 
-function searchThisArea() {
-  searchPlaces();
-}
-
 document.getElementById("typeFilter").addEventListener("change", searchPlaces);
+document.getElementById("openNowFilter").addEventListener("change", searchPlaces);
+document.getElementById("miscFilter").addEventListener("change", searchPlaces);
+
 </script>
 
 <script async defer
