@@ -45,6 +45,7 @@ html, body {height:100%; margin:0; font-family:Arial,sans-serif;}
 <label class="legend-item"><input type="checkbox" id="toggleSuper" checked><div class="legend-color" style="background:green;"></div>Supermercados</label>
 <label class="legend-item"><input type="checkbox" id="toggleBazar" checked><div class="legend-color" style="background:orange;"></div>Bazares</label>
 <label class="legend-item"><input type="checkbox" id="toggleGas" checked><div class="legend-color" style="background:purple;"></div>Gasolineras</label>
+<label class="legend-item"><input type="checkbox" id="toggleCafe" checked><div class="legend-color" style="background:blue;"></div>Bares/Cafeterías</label>
 </div>
 
 <button id="menuButton">☰</button>
@@ -55,7 +56,7 @@ html, body {height:100%; margin:0; font-family:Arial,sans-serif;}
 </div>
 
 <button class="btn-locate" id="locateBtn">📍</button>
-<button class="btn-add-manual" id="addBtn">➕ Guardar coordenada</button>
+<button class="btn-add-manual" id="addBtn">➕ Añadir local</button>
 <button class="btn-search-area" id="searchAreaBtn">Buscar en esta área</button>
 
 <div id="map"></div>
@@ -66,7 +67,7 @@ html, body {height:100%; margin:0; font-family:Arial,sans-serif;}
 <script>
 document.addEventListener("DOMContentLoaded",()=>{
 
-const map=L.map('map',{minZoom:6,maxZoom:19}).setView([40.4168,-3.7038],10);
+const map=L.map('map',{minZoom:12,maxZoom:19}).setView([40.4168,-3.7038],14);
 L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{
   attribution:'©OpenStreetMap ©CARTO'
 }).addTo(map);
@@ -74,7 +75,7 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{
 const cluster=L.markerClusterGroup();
 map.addLayer(cluster);
 
-// Usuario y GPS
+// Usuario y GPS muy preciso
 let userLocation=null;
 const userMarker=L.circleMarker([0,0],{radius:10,color:"#2563eb",weight:2,fillColor:"#2563eb",fillOpacity:0.7}).addTo(map);
 if(navigator.geolocation){
@@ -86,11 +87,12 @@ if(navigator.geolocation){
   },err=>console.log("GPS error:",err),{enableHighAccuracy:true, maximumAge:0, timeout:5000});
 }
 
+// Iconos modernos estilo iOS
 function icon(color){return L.icon({iconUrl:`https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,shadowUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',iconSize:[25,41],iconAnchor:[12,41]})}
-const icons={estanco:icon("red"),super:icon("green"),bazar:icon("orange"),gas:icon("purple"),vaper:icon("darkblue"),grey:icon("grey")};
+const icons={estanco:icon("red"),super:icon("green"),bazar:icon("orange"),gas:icon("purple"),cafe:icon("blue"),grey:icon("grey")};
 
 let elementsData=[];
-let filter={estanco:true,super:true,bazar:true,gas:true,vaper:true};
+let filter={estanco:true,super:true,bazar:true,gas:true,cafe:true};
 
 function analizarHorario(opening){
 if(!opening) return {estado:null,texto:"<span class='badge closed'>Horario desconocido</span>"};
@@ -107,11 +109,11 @@ if(min>=mi && min<=mf) return {estado:true,texto:"<span class='badge open'>Abier
 return {estado:false,texto:"<span class='badge closed'>Cerrado</span>"};
 }
 
-// Buscar datos Overpass
+// Buscar datos Overpass incluyendo bares/cafeterías con vending
 async function buscarDatos(){
 cluster.clearLayers();
 const c=map.getCenter();
-const r=6000;
+const r=5000;
 const query=`[out:json][timeout:25];
 (
 node["shop"="tobacco"](around:${r},${c.lat},${c.lng});
@@ -119,7 +121,7 @@ node["shop"="supermarket"](around:${r},${c.lat},${c.lng});
 node["shop"="convenience"](around:${r},${c.lat},${c.lng});
 node["shop"="vape"](around:${r},${c.lat},${c.lng});
 node["amenity"="fuel"](around:${r},${c.lat},${c.lng});
-node["amenity"="bar"](around:${r},${c.lat},${c.lng});
+node["amenity"~"bar|cafe"]["vending"="tobacco"](around:${r},${c.lat},${c.lng});
 );out;`;
 try{
 const resp=await fetch("https://overpass-api.de/api/interpreter",{method:"POST",body:query});
@@ -136,12 +138,13 @@ const greyClosed=document.getElementById("greyClosed").checked;
 const search=document.getElementById("searchName").value.toLowerCase();
 
 elementsData.forEach(p=>{
-let tipo="bazar"; 
+let tipo="bazar";
 if(p.tags?.shop==="tobacco") tipo="estanco";
 else if(p.tags?.shop==="supermarket") tipo="super";
-else if(p.tags?.shop==="vape") tipo="vaper";
 else if(p.tags?.shop==="convenience") tipo="bazar";
+else if(p.tags?.shop==="vape") tipo="bazar"; 
 else if(p.tags?.amenity==="fuel") tipo="gas";
+else if(p.tags?.amenity==="bar"||p.tags?.amenity==="cafe") tipo="cafe";
 
 if(!filter[tipo]) return;
 if(search && !p.tags?.name?.toLowerCase().includes(search)) return;
@@ -170,13 +173,20 @@ document.getElementById("toggleEstanco").onchange=e=>{filter.estanco=e.target.ch
 document.getElementById("toggleSuper").onchange=e=>{filter.super=e.target.checked; render();}
 document.getElementById("toggleBazar").onchange=e=>{filter.bazar=e.target.checked; render();}
 document.getElementById("toggleGas").onchange=e=>{filter.gas=e.target.checked; render();}
-document.getElementById("toggleVaper").onchange=e=>{filter.vaper=e.target.checked; render();}
+document.getElementById("toggleCafe").onchange=e=>{filter.cafe=e.target.checked; render();}
 
 // Botón localizar usuario
 document.getElementById("locateBtn").onclick=()=>{if(userLocation) map.flyTo(userLocation,16);};
 
-// Guardar coordenada manual
-document.getElementById("addBtn").onclick=()=>{const c=map.getCenter(); alert("Coordenada guardada: "+c.lat.toFixed(6)+", "+c.lng.toFixed(6));};
+// Añadir local manual
+document.getElementById("addBtn").onclick=()=>{
+const name=prompt("Nombre del local:");
+if(!name) return;
+const type=prompt("Tipo: estanco, super, bazar, gas, cafe").toLowerCase();
+const c=map.getCenter();
+alert(`Local añadido: ${name} (${type})\nCoordenadas: ${c.lat.toFixed(6)}, ${c.lng.toFixed(6)}`);
+// Aquí podrías guardar en tu base de datos o localStorage
+};
 
 // Buscar en área actual
 document.getElementById("searchAreaBtn").onclick=buscarDatos;
