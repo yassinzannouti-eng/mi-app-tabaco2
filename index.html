@@ -10,79 +10,73 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
 
 <style>
-html,body{height:100%;margin:0;font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background:#f5f5f7;}
-#map{height:100%;width:100%;display:none;}
+html, body { height: 100%; margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f5f5f7; }
+#map { height: 100%; width: 100%; display: none; }
 
-#overlay{
-  position:fixed; top:0;left:0; width:100%;height:100%;
-  background:white; display:flex; flex-direction:column;
-  align-items:center; justify-content:center; z-index:5000;
-  font-size:18px; text-align:center; padding:20px; gap:20px;
+#overlay {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: white; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; z-index: 5000;
+  font-size: 18px; text-align: center; padding: 20px; gap: 20px;
 }
 
-#overlay button{
-  padding:12px 24px; border:none; background:#007aff;
-  color:white; border-radius:12px; cursor:pointer; font-weight: 600;
+#overlay button {
+  padding: 12px 24px; border: none; background: #007aff;
+  color: white; border-radius: 12px; cursor: pointer; font-weight: 600;
 }
 
-#menuButton{
-  position:fixed;top:15px;left:15px;z-index:2000;
-  background:rgba(255,255,255,0.9);border:none;padding:12px;
-  border-radius:14px;box-shadow:0 4px 15px rgba(0,0,0,0.1);
-  cursor:pointer; backdrop-filter: blur(5px);
+#menuButton {
+  position: fixed; top: 15px; left: 15px; z-index: 2000;
+  background: rgba(255,255,255,0.9); border: none; padding: 12px;
+  border-radius: 14px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+  cursor: pointer; backdrop-filter: blur(5px);
 }
 
-#panel{
-  position:fixed;top:0;left:-280px;width:260px;height:100%;
-  background:white;z-index:2100;padding:25px;
-  box-shadow:4px 0 20px rgba(0,0,0,0.1);
-  transition:.3s cubic-bezier(0.4, 0, 0.2, 1);overflow:auto;
+#panel {
+  position: fixed; top: 0; left: -280px; width: 260px; height: 100%;
+  background: white; z-index: 2100; padding: 25px;
+  box-shadow: 4px 0 20px rgba(0,0,0,0.1);
+  transition: .3s cubic-bezier(0.4, 0, 0.2, 1); overflow: auto;
 }
-#panel.active{left:0;}
+#panel.active { left: 0; }
 
-.search-bar{
-  position:absolute;top:15px;left:50%;
-  transform:translateX(-50%);
-  z-index:1500;display:flex;background:rgba(255,255,255,0.95);
-  border-radius:18px;box-shadow:0 8px 24px rgba(0,0,0,0.12);
-  overflow:hidden;width:85%;max-width:420px;
+.search-bar {
+  position: absolute; top: 15px; left: 50%;
+  transform: translateX(-50%);
+  z-index: 1500; display: flex; background: rgba(255,255,255,0.95);
+  border-radius: 18px; box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  overflow: hidden; width: 85%; max-width: 420px;
   backdrop-filter: blur(10px); border: 1px solid rgba(0,0,0,0.05);
 }
-.search-bar input{flex:1;padding:14px;border:none;outline:none;font-size:16px;background:transparent;}
-.search-bar button{padding:14px 20px;border:none;background:#007aff;color:white;cursor:pointer;}
+.search-bar input { flex: 1; padding: 14px; border: none; outline: none; font-size: 16px; background: transparent; }
+.search-bar button { padding: 14px 20px; border: none; background: #007aff; color: white; cursor: pointer; }
 
-.btn-pin{
-  position:absolute;bottom:100px;right:20px;
-  width:55px;height:55px;background:white;
-  border-radius:50%;display:flex;align-items:center;
-  justify-content:center;color:#007aff;font-size:24px;
-  border:none;cursor:pointer;z-index:1500;
-  box-shadow:0 6px 16px rgba(0,0,0,0.15);
+.btn-pin {
+  position: absolute; bottom: 100px; right: 20px;
+  width: 55px; height: 55px; background: white;
+  border-radius: 50%; display: flex; align-items: center;
+  justify-content: center; color: #007aff; font-size: 24px;
+  border: none; cursor: pointer; z-index: 1500;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.15);
 }
 
-.btn-search-area{
-  position:absolute;bottom:30px;right:20px;
-  background:#007aff;color:white;border:none;
-  padding:14px 22px;border-radius:25px;
-  cursor:pointer;z-index:1500; font-weight: 700;
-  box-shadow:0 6px 20px rgba(0,122,255,0.3);
+.btn-search-area {
+  position: absolute; bottom: 30px; right: 20px;
+  background: #007aff; color: white; border: none;
+  padding: 14px 22px; border-radius: 25px;
+  cursor: pointer; z-index: 1500; font-weight: 700;
+  box-shadow: 0 6px 20px rgba(0,122,255,0.3);
 }
 
-/* Popups Estilo Apple */
-.popup-container { text-align: center; min-width: 180px; padding: 5px; }
+/* Popups */
+.popup-container { text-align: center; min-width: 220px; padding: 8px; }
 .btn-maps { 
-    display: block; background: #007aff; color: white !important; 
-    text-align: center; padding: 12px; border-radius: 12px; 
-    text-decoration: none !important; margin-top: 12px; font-weight: 600; font-size: 14px;
+  display: block; background: #007aff; color: white !important; 
+  text-align: center; padding: 12px; border-radius: 12px; 
+  text-decoration: none !important; margin-top: 12px; font-weight: 600; font-size: 14px;
 }
-.horario-info { font-size: 12px; color: #636366; display: block; margin-top: 8px; line-height: 1.4; border-top: 1px solid #f2f2f7; padding-top: 8px;}
-
-/* Marcadores estilo Apple */
-.apple-marker {
-    width: 22px; height: 22px;
-    border-radius: 50%; border: 3px solid white;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-}
+.horario-info { font-size: 12px; color: #636366; display: block; margin-top: 8px; line-height: 1.4; border-top: 1px solid #f2f2f7; padding-top: 8px; }
+.vape-info { font-size: 13px; font-weight: 600; margin-top: 6px; color: #34c759; } /* Verde para "sí vende" */
 </style>
 </head>
 
@@ -125,8 +119,10 @@ const onlyOpen = document.getElementById("onlyOpen");
 const greyClosed = document.getElementById("greyClosed");
 
 let map, userLocation, markersLayer, userMarker, elementsData = [];
+let lastCenter = null;
+let lastZoom = null;
 
-// Cargar estado guardado
+// Cargar estado
 onlyOpen.checked = localStorage.getItem('onlyOpen') === 'true';
 greyClosed.checked = localStorage.getItem('greyClosed') !== 'false';
 
@@ -140,18 +136,34 @@ function traducirHorario(txt) {
         .replace(/off/g, "Cerrado").replace(/;/g, "<br>");
 }
 
-/* ---------- ESTADO DE HORARIO (mejorado) ---------- */
+/* ---------- ESTADO DE HORARIO ---------- */
 function getOpeningStatus(opening_hours_str) {
     if (!opening_hours_str || opening_hours_str.trim() === '') {
-        return { isOpen: true, known: false };   // Desconocido → siempre mostrar, pero se puede atenuar
+        return { isOpen: true, known: false };
     }
     try {
         const oh = new opening_hours(opening_hours_str);
         return { isOpen: oh.isOpen(new Date()), known: true };
     } catch (e) {
-        console.warn("Error parseando horario:", opening_hours_str, e);
         return { isOpen: true, known: false };
     }
+}
+
+/* ---------- ¿Vende vapers? (actualizado) ---------- */
+function vendeVapers(tags) {
+    if (!tags) return false;
+    const shop = tags.shop;
+    const amenity = tags.amenity;
+
+    // Casi todos estos tipos venden vapes en España
+    if (shop === 'vape' || shop === 'e-cigarette' ||
+        shop === 'tobacco' ||
+        shop === 'supermarket' ||
+        shop === 'convenience' ||
+        amenity === 'fuel') {
+        return true;
+    }
+    return false;
 }
 
 function iniciarGeolocalizacion() {
@@ -161,7 +173,7 @@ function iniciarGeolocalizacion() {
             overlayText.innerHTML = "Error: GPS desactivado o denegado.";
             retryBtn.style.display = "block";
         },
-        { enableHighAccuracy: true, timeout: 10000 }
+        { enableHighAccuracy: true, timeout: 12000 }
     );
 }
 
@@ -179,22 +191,33 @@ function iniciarMapa(lat, lon) {
     }).addTo(map);
 
     markersLayer = L.markerClusterGroup({
-        maxClusterRadius: 60,
+        maxClusterRadius: 70,
         spiderfyOnMaxZoom: true,
         showCoverageOnHover: false,
-        zoomToBoundsOnClick: true,
-        animate: true
+        zoomToBoundsOnClick: true
     }).addTo(map);
 
     userMarker = L.circleMarker([lat, lon], {
-        radius: 10, color: "white", fillColor: "#007aff", fillOpacity: 1, weight: 3
+        radius: 9, color: "white", fillColor: "#007aff", fillOpacity: 0.9, weight: 3
     }).addTo(map);
 
-    // ←←← Eventos del mapa (aquí sí existe "map")
     let searchTimeout;
     map.on('moveend zoomend', () => {
-        clearTimeout(searchTimeout);
-        searchTimeout = setTimeout(buscarDatos, 900);
+        const currentCenter = map.getCenter();
+        const currentZoom = map.getZoom();
+
+        const movedFar = !lastCenter || 
+                         currentCenter.distanceTo(lastCenter) > 150 || 
+                         Math.abs(currentZoom - lastZoom) > 0.5;
+
+        if (movedFar) {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                lastCenter = currentCenter;
+                lastZoom = currentZoom;
+                buscarDatos();
+            }, 1200);
+        }
     });
 
     buscarDatos();
@@ -202,7 +225,7 @@ function iniciarMapa(lat, lon) {
 
 function getVisibleRadius() {
     const bounds = map.getBounds();
-    return Math.round(map.getCenter().distanceTo(bounds.getNorthEast()) * 1.15);
+    return Math.round(map.getCenter().distanceTo(bounds.getNorthEast()) * 1.2);
 }
 
 async function buscarDatos() {
@@ -230,14 +253,15 @@ async function buscarDatos() {
             method: "POST",
             body: "data=" + encodeURIComponent(query)
         });
+        if (!resp.ok) throw new Error("Overpass error");
         const data = await resp.json();
         elementsData = data.elements || [];
         render();
     } catch (e) {
-        console.error(e);
-        overlayText.textContent = 'Error al cargar datos.';
+        console.error("Error al buscar:", e);
+        overlayText.textContent = 'Error al cargar datos';
     } finally {
-        setTimeout(() => overlay.style.display = 'none', 600);
+        setTimeout(() => overlay.style.display = 'none', 800);
     }
 }
 
@@ -245,42 +269,49 @@ function render() {
     markersLayer.clearLayers();
 
     const showOnlyOpen = onlyOpen.checked;
-    const greyOutClosed = greyClosed.checked;
+    const greyOut = greyClosed.checked;
 
     elementsData.forEach(p => {
         const horarioRaw = p.tags?.opening_hours || "";
         const status = getOpeningStatus(horarioRaw);
 
-        // Filtrado: solo ocultar los que SABEMOS que están cerrados
         if (showOnlyOpen && status.known && !status.isOpen) return;
 
-        let appleColor = "#8e8e93";
-        if (p.tags?.shop === "tobacco") appleColor = "#ff3b30";
-        else if (p.tags?.amenity === "fuel") appleColor = "#ff9500";
-        else if (p.tags?.shop === "supermarket") appleColor = "#34c759";
-        else if (p.tags?.shop === "vape" || p.tags?.shop === "e-cigarette") appleColor = "#5856d6";
+        let color = "#8e8e93"; // gris default
+        if (p.tags?.shop === "tobacco") color = "#ff3b30";          // rojo estanco
+        else if (p.tags?.shop === "supermarket") color = "#34c759"; // verde super
+        else if (p.tags?.amenity === "fuel") color = "#9f47ff";     // morado gasolinera
+        else if (p.tags?.shop === "vape" || p.tags?.shop === "e-cigarette") color = "#5856d6"; // morado vape
+        else if (p.tags?.shop === "convenience") color = "#ff9500"; // naranja bazar
 
-        // Atenuar si está cerrado O si el horario es desconocido
-        const opacity = (greyOutClosed && !(status.known && status.isOpen)) ? 0.35 : 1.0;
+        const opacity = (greyOut && !(status.known && status.isOpen)) ? 0.45 : 1.0;
 
         const horarioEsp = traducirHorario(horarioRaw);
-        const nombre = p.tags?.name || "Local de venta";
+        const nombre = p.tags?.name || "Local";
 
         const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(nombre + " " + (p.tags["addr:city"] || p.tags["addr:street"] || ""))}`;
 
-        const appleIcon = L.divIcon({
-            className: 'custom-div-icon',
-            html: `<div class="apple-marker" style="background:${appleColor}; opacity:${opacity};"></div>`,
-            iconSize: [28, 28],
-            iconAnchor: [14, 14],
-            popupAnchor: [0, -10]
+        const vende = vendeVapers(p.tags);
+        const vapeText = vende ? '<div class="vape-info">✓ Probablemente vende vapers</div>' : '';
+
+        const pinIcon = L.divIcon({
+            className: "custom-pin",
+            html: `<svg width="32" height="44" viewBox="0 0 32 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M16 0C7.164 0 0 7.164 0 16c0 11.046 16 28 16 28s16-16.954 16-28c0-8.836-7.164-16-16-16z" fill="${color}" opacity="${opacity}"/>
+                <circle cx="16" cy="16" r="6" fill="white"/>
+            </svg>`,
+            iconSize: [32, 44],
+            iconAnchor: [16, 44],
+            popupAnchor: [0, -40],
+            className: ''
         });
 
-        L.marker([p.lat, p.lon], { icon: appleIcon })
+        L.marker([p.lat, p.lon], { icon: pinIcon })
             .bindPopup(`
                 <div class="popup-container">
                     <strong style="font-size:16px;">${nombre}</strong><br>
                     <span class="horario-info"><b>Horario:</b><br>${horarioEsp}</span>
+                    ${vapeText}
                     <a href="${mapsUrl}" target="_blank" class="btn-maps">VER EN MAPS</a>
                 </div>
             `)
@@ -288,7 +319,7 @@ function render() {
     });
 }
 
-// Eventos de botones
+// Eventos
 document.getElementById("menuButton").onclick = () => document.getElementById("panel").classList.toggle("active");
 document.getElementById("pinBtn").onclick = () => map.flyTo([userLocation.lat, userLocation.lon], 17);
 document.getElementById("searchAreaBtn").onclick = buscarDatos;
@@ -306,7 +337,6 @@ document.getElementById("searchBtn").onclick = async () => {
     } catch (e) { console.error(e); }
 };
 
-// Actualizar render al cambiar filtros
 onlyOpen.addEventListener('change', () => {
     localStorage.setItem('onlyOpen', onlyOpen.checked);
     render();
