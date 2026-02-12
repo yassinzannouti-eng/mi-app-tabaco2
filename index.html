@@ -27,7 +27,7 @@ html, body {height:100%; margin:0; font-family:Arial,sans-serif;}
 .badge{font-size:12px; padding:3px 6px; border-radius:8px;}
 .open{background:#22c55e;color:white;}
 .closed{background:#ef4444;color:white;}
-#miscFilters{position:fixed; bottom:80px; left:50%; transform:translateX(-50%); z-index:1500; background:rgba(255,255,255,0.95); padding:10px 15px; border-radius:12px; box-shadow:0 3px 10px rgba(0,0,0,0.2); display:flex; gap:10px;}
+#miscFilters{position:fixed; bottom:80px; left:50%; transform:translateX(-50%); z-index:1500; background:rgba(255,255,255,0.95); padding:10px 15px; border-radius:12px; box-shadow:0 3px 10px rgba(0,0,0,0.2); display:flex; gap:10px; flex-wrap:wrap; justify-content:center;}
 </style>
 </head>
 <body>
@@ -41,9 +41,10 @@ html, body {height:100%; margin:0; font-family:Arial,sans-serif;}
 </div>
 
 <div id="miscFilters">
-<label class="legend-item"><input type="checkbox" id="toggleEstanco" checked><div class="legend-color" style="background:red;"></div>Estanco</label>
-<label class="legend-item"><input type="checkbox" id="toggleVaper" checked><div class="legend-color" style="background:darkblue;"></div>Vaper</label>
-<label class="legend-item"><input type="checkbox" id="toggleMisc" checked><div class="legend-color" style="background:green;"></div>Miscelánea</label>
+<label class="legend-item"><input type="checkbox" id="toggleEstanco" checked><div class="legend-color" style="background:red;"></div>Estancos</label>
+<label class="legend-item"><input type="checkbox" id="toggleSuper" checked><div class="legend-color" style="background:green;"></div>Supermercados</label>
+<label class="legend-item"><input type="checkbox" id="toggleBazar" checked><div class="legend-color" style="background:orange;"></div>Bazares</label>
+<label class="legend-item"><input type="checkbox" id="toggleGas" checked><div class="legend-color" style="background:purple;"></div>Gasolineras</label>
 </div>
 
 <button id="menuButton">☰</button>
@@ -65,7 +66,7 @@ html, body {height:100%; margin:0; font-family:Arial,sans-serif;}
 <script>
 document.addEventListener("DOMContentLoaded",()=>{
 
-const map=L.map('map').setView([40.4168,-3.7038],6);
+const map=L.map('map',{minZoom:6,maxZoom:19}).setView([40.4168,-3.7038],10);
 L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{
   attribution:'©OpenStreetMap ©CARTO'
 }).addTo(map);
@@ -86,10 +87,10 @@ if(navigator.geolocation){
 }
 
 function icon(color){return L.icon({iconUrl:`https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,shadowUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',iconSize:[25,41],iconAnchor:[12,41]})}
-const icons={estanco:icon("red"),vaper:icon("darkblue"),misc:icon("green"),grey:icon("grey")};
+const icons={estanco:icon("red"),super:icon("green"),bazar:icon("orange"),gas:icon("purple"),vaper:icon("darkblue"),grey:icon("grey")};
 
 let elementsData=[];
-let filter={estanco:true,vaper:true,misc:true};
+let filter={estanco:true,super:true,bazar:true,gas:true,vaper:true};
 
 function analizarHorario(opening){
 if(!opening) return {estado:null,texto:"<span class='badge closed'>Horario desconocido</span>"};
@@ -114,9 +115,11 @@ const r=6000;
 const query=`[out:json][timeout:25];
 (
 node["shop"="tobacco"](around:${r},${c.lat},${c.lng});
-node["shop"~"vape|convenience|supermarket"](around:${r},${c.lat},${c.lng});
-node["amenity"="bar"](around:${r},${c.lat},${c.lng});
+node["shop"="supermarket"](around:${r},${c.lat},${c.lng});
+node["shop"="convenience"](around:${r},${c.lat},${c.lng});
+node["shop"="vape"](around:${r},${c.lat},${c.lng});
 node["amenity"="fuel"](around:${r},${c.lat},${c.lng});
+node["amenity"="bar"](around:${r},${c.lat},${c.lng});
 );out;`;
 try{
 const resp=await fetch("https://overpass-api.de/api/interpreter",{method:"POST",body:query});
@@ -133,9 +136,12 @@ const greyClosed=document.getElementById("greyClosed").checked;
 const search=document.getElementById("searchName").value.toLowerCase();
 
 elementsData.forEach(p=>{
-let tipo="misc"; 
+let tipo="bazar"; 
 if(p.tags?.shop==="tobacco") tipo="estanco";
+else if(p.tags?.shop==="supermarket") tipo="super";
 else if(p.tags?.shop==="vape") tipo="vaper";
+else if(p.tags?.shop==="convenience") tipo="bazar";
+else if(p.tags?.amenity==="fuel") tipo="gas";
 
 if(!filter[tipo]) return;
 if(search && !p.tags?.name?.toLowerCase().includes(search)) return;
@@ -146,11 +152,9 @@ if(onlyOpen && horario.estado===false) return;
 let icono=icons[tipo];
 if(horario.estado===false && greyClosed) icono=icons.grey;
 
-const tieneTabaco=true;
-const tieneVaper=p.tags?.shop==="vape"||p.tags?.vending?.includes("vapers")||true;
-
+const tieneVaper=p.tags?.shop==="vape"||p.tags?.vending?.includes("vapers");
 const popupHTML=`<b>${p.tags?.name||tipo}</b><br>${horario.texto}<br>Tabaco: ✅<br>Vaper: ${tieneVaper?"✅":"❌"}<br>
-<a href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}" target="_blank">Cómo llegar</a>`;
+<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.tags?.name||tipo)}%20${p.lat},${p.lon}" target="_blank">Ver en Maps</a>`;
 
 const marker=L.marker([p.lat,p.lon],{icon:icono}).bindPopup(popupHTML);
 cluster.addLayer(marker);
@@ -163,8 +167,10 @@ document.getElementById("onlyOpen").onchange=render;
 document.getElementById("greyClosed").onchange=render;
 document.getElementById("searchName").oninput=render;
 document.getElementById("toggleEstanco").onchange=e=>{filter.estanco=e.target.checked; render();}
+document.getElementById("toggleSuper").onchange=e=>{filter.super=e.target.checked; render();}
+document.getElementById("toggleBazar").onchange=e=>{filter.bazar=e.target.checked; render();}
+document.getElementById("toggleGas").onchange=e=>{filter.gas=e.target.checked; render();}
 document.getElementById("toggleVaper").onchange=e=>{filter.vaper=e.target.checked; render();}
-document.getElementById("toggleMisc").onchange=e=>{filter.misc=e.target.checked; render();}
 
 // Botón localizar usuario
 document.getElementById("locateBtn").onclick=()=>{if(userLocation) map.flyTo(userLocation,16);};
