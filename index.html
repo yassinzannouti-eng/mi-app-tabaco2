@@ -8,90 +8,80 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 
 <style>
-html, body {height:100%; margin:0; font-family:Arial, sans-serif;}
-#map {height:100%; width:100%;}
+html,body{height:100%;margin:0;font-family:Arial;}
+#map{height:100%;width:100%;}
 
+/* PANEL IZQUIERDA */
+#menuButton{
+position:fixed;top:15px;left:15px;z-index:2000;
+background:white;border:none;padding:10px;
+border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.25);
+cursor:pointer;
+}
+#panel{
+position:fixed;top:0;left:-270px;width:250px;height:100%;
+background:white;z-index:2100;padding:20px;
+box-shadow:2px 0 15px rgba(0,0,0,0.25);
+transition:.3s;overflow:auto;
+}
+#panel.active{left:0;}
+
+/* BUSCADOR */
 .search-bar{
-position:absolute;
-top:15px;
-left:50%;
+position:absolute;top:15px;left:50%;
 transform:translateX(-50%);
-z-index:1500;
-display:flex;
-background:white;
-border-radius:25px;
-box-shadow:0 4px 15px rgba(0,0,0,0.2);
-overflow:hidden;
-width:85%;
-max-width:400px;
+z-index:1500;display:flex;background:white;
+border-radius:25px;box-shadow:0 4px 15px rgba(0,0,0,0.18);
+overflow:hidden;width:85%;max-width:400px;
 }
+.search-bar input{flex:1;padding:10px;border:none;outline:none;}
+.search-bar button{padding:10px;border:none;background:#2563eb;color:white;cursor:pointer;}
 
-.search-bar input{
-flex:1;
-padding:10px;
-border:none;
-outline:none;
-}
-
-.search-bar button{
-padding:10px;
-border:none;
-background:#2563eb;
-color:white;
-cursor:pointer;
-}
-
+/* BOTONES */
 .btn-pin{
-position:absolute;
-bottom:100px;
-right:20px;
-z-index:1500;
-width:50px;
-height:50px;
-background:#2563eb;
-border-radius:50%;
-display:flex;
-align-items:center;
-justify-content:center;
+position:absolute;bottom:100px;right:20px;
+width:50px;height:50px;background:#2563eb;
+border-radius:50%;display:flex;align-items:center;
+justify-content:center;color:white;font-size:22px;
+border:none;cursor:pointer;z-index:1500;
 box-shadow:0 4px 12px rgba(0,0,0,0.3);
-border:none;
-cursor:pointer;
-color:white;
-font-size:22px;
 }
-
 .btn-search-area{
-position:absolute;
-bottom:30px;
-right:20px;
-z-index:1500;
-background:#2563eb;
-border:none;
-padding:10px 15px;
-border-radius:20px;
-color:white;
-cursor:pointer;
+position:absolute;bottom:30px;right:20px;
+background:#2563eb;color:white;border:none;
+padding:10px 15px;border-radius:20px;
+cursor:pointer;z-index:1500;
 box-shadow:0 3px 10px rgba(0,0,0,0.3);
 }
 
+/* FILTROS INFERIORES */
 #filters{
-position:absolute;
-bottom:30px;
-left:50%;
+position:absolute;bottom:30px;left:50%;
 transform:translateX(-50%);
-background:rgba(255,255,255,0.95);
-padding:10px 15px;
-border-radius:12px;
-box-shadow:0 3px 10px rgba(0,0,0,0.25);
-display:flex;
-gap:15px;
-z-index:1500;
+background:white;padding:10px 15px;
+border-radius:12px;display:flex;gap:15px;
+z-index:1500;box-shadow:0 3px 10px rgba(0,0,0,0.25);
 font-size:14px;
 }
+
+.badge{
+padding:3px 6px;border-radius:6px;
+color:white;font-size:12px;
+}
+.open{background:#22c55e;}
+.closed{background:#ef4444;}
 </style>
 </head>
 
 <body>
+
+<button id="menuButton">☰</button>
+
+<div id="panel">
+<h3>Filtros</h3>
+<label><input type="checkbox" id="onlyOpen"> Solo abiertos</label><br>
+<label><input type="checkbox" id="greyClosed" checked> Cerrados en gris</label>
+</div>
 
 <div class="search-bar">
 <input type="text" id="address" placeholder="Buscar ciudad o zona">
@@ -119,9 +109,7 @@ let userLocation=null;
 let elementsData=[];
 let markersLayer=L.layerGroup();
 
-const map=L.map('map',{zoomControl:false});
-L.control.zoom({position:'bottomright'}).addTo(map);
-
+const map=L.map('map');
 L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{
 attribution:'©OpenStreetMap ©CARTO'
 }).addTo(map);
@@ -129,31 +117,34 @@ attribution:'©OpenStreetMap ©CARTO'
 map.addLayer(markersLayer);
 
 const userMarker=L.circleMarker([0,0],{
-radius:8,
-color:"#2563eb",
-fillColor:"#2563eb",
-fillOpacity:0.9
+radius:8,color:"#2563eb",
+fillColor:"#2563eb",fillOpacity:0.9
 }).addTo(map);
 
-/* ========= ICONOS ========= */
-
-function createIcon(color){
+/* ICONOS */
+function icon(color){
 return L.icon({
 iconUrl:`https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
 shadowUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-iconSize:[25,41],
-iconAnchor:[12,41]
+iconSize:[25,41],iconAnchor:[12,41]
 });
 }
-
 const icons={
-estanco:createIcon("red"),
-super:createIcon("green"),
-bazar:createIcon("violet"),
-gas:createIcon("yellow")
+estanco:icon("red"),
+super:icon("green"),
+bazar:icon("violet"),
+gas:icon("yellow"),
+grey:icon("grey")
 };
 
-/* ========= GEOLOCALIZACIÓN PRIORITARIA ========= */
+/* GEOLOCALIZACIÓN INMEDIATA */
+navigator.geolocation.getCurrentPosition(pos=>{
+iniciarMapa(pos.coords.latitude,pos.coords.longitude);
+},()=>{
+fetch("https://ipapi.co/json/")
+.then(r=>r.json())
+.then(data=>iniciarMapa(data.latitude,data.longitude));
+});
 
 function iniciarMapa(lat,lon){
 userLocation={lat,lon};
@@ -162,36 +153,27 @@ userMarker.setLatLng([lat,lon]);
 buscarDatos();
 }
 
-if(navigator.geolocation){
-navigator.geolocation.getCurrentPosition(pos=>{
-iniciarMapa(pos.coords.latitude,pos.coords.longitude);
-},()=>{
-// Ubicación estimada por IP (ligero)
-fetch("https://ipapi.co/json/")
-.then(r=>r.json())
-.then(data=>iniciarMapa(data.latitude,data.longitude));
-});
+/* HORARIOS */
+function analizarHorario(opening){
+if(!opening) return {estado:null,texto:"Horario desconocido"};
+if(opening.includes("24/7")) return {estado:true,texto:"<span class='badge open'>24/7</span>"};
+
+const now=new Date();
+const min=now.getHours()*60+now.getMinutes();
+const rangos=[...opening.matchAll(/(\d{2}:\d{2})-(\d{2}:\d{2})/g)];
+
+for(let r of rangos){
+const ini=r[1].split(":");
+const fin=r[2].split(":");
+const mi=parseInt(ini[0])*60+parseInt(ini[1]);
+const mf=parseInt(fin[0])*60+parseInt(fin[1]);
+if(min>=mi && min<=mf) return {estado:true,texto:"<span class='badge open'>Abierto</span>"};
+}
+return {estado:false,texto:"<span class='badge closed'>Cerrado</span>"};
 }
 
-/* ========= FILTROS ========= */
-
-function filtrosActivos(){
-return {
-estanco:document.getElementById("fEstanco").checked,
-super:document.getElementById("fSuper").checked,
-bazar:document.getElementById("fBazar").checked,
-gas:document.getElementById("fGas").checked
-};
-}
-
-document.querySelectorAll("#filters input").forEach(el=>{
-el.onchange=render;
-});
-
-/* ========= BUSCAR DATOS OPTIMIZADO ========= */
-
+/* BUSCAR DATOS */
 async function buscarDatos(){
-
 const zoom=map.getZoom();
 const radio=zoom>=16?2000:zoom>=14?4000:6000;
 const c=map.getCenter();
@@ -205,60 +187,59 @@ node["amenity"="fuel"](around:${radio},${c.lat},${c.lng});
 );
 out;`;
 
-try{
-const resp=await fetch("https://overpass-api.de/api/interpreter",{
-method:"POST",
-body:query
-});
+const resp=await fetch("https://overpass-api.de/api/interpreter",{method:"POST",body:query});
 const data=await resp.json();
 elementsData=data.elements||[];
 render();
-}catch(e){
-console.log("Error Overpass",e);
-}
 }
 
-/* ========= RENDER ========= */
-
+/* RENDER */
 function render(){
 markersLayer.clearLayers();
-const filtros=filtrosActivos();
+
+const filtros={
+estanco:fEstanco.checked,
+super:fSuper.checked,
+bazar:fBazar.checked,
+gas:fGas.checked
+};
 
 elementsData.forEach(p=>{
-
 let tipo=null;
-
 if(p.tags?.shop==="tobacco") tipo="estanco";
 else if(p.tags?.shop==="supermarket") tipo="super";
 else if(p.tags?.shop==="variety_store") tipo="bazar";
 else if(p.tags?.amenity==="fuel") tipo="gas";
 
-if(!tipo || !filtros[tipo]) return;
+if(!tipo||!filtros[tipo]) return;
+
+const horario=analizarHorario(p.tags?.opening_hours);
+if(onlyOpen.checked && horario.estado===false) return;
+
+let icono=icons[tipo];
+if(horario.estado===false && greyClosed.checked) icono=icons.grey;
+
+const nombre=p.tags?.name||tipo;
 
 const popup=`
-<b>${p.tags?.name||tipo}</b><br>
-<a href="https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}" target="_blank">
-Ver en Maps</a>
+<b>${nombre}</b><br>
+${horario.texto}<br><br>
+<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(nombre)}"
+target="_blank">Cómo llegar</a>
 `;
 
-const marker=L.marker([p.lat,p.lon],{icon:icons[tipo]})
-.bindPopup(popup);
-
-markersLayer.addLayer(marker);
-
+L.marker([p.lat,p.lon],{icon:icono})
+.bindPopup(popup)
+.addTo(markersLayer);
 });
 }
 
-/* ========= BOTONES ========= */
-
-document.getElementById("pinBtn").onclick=()=>{
-if(userLocation) map.flyTo(userLocation,16);
-};
-
-document.getElementById("searchAreaBtn").onclick=buscarDatos;
-
-document.getElementById("searchBtn").onclick=async()=>{
-const val=document.getElementById("address").value;
+/* EVENTOS */
+menuButton.onclick=()=>panel.classList.toggle("active");
+pinBtn.onclick=()=>{if(userLocation) map.flyTo(userLocation,16);}
+searchAreaBtn.onclick=buscarDatos;
+searchBtn.onclick=async()=>{
+const val=address.value;
 if(!val) return;
 const resp=await fetch('https://nominatim.openstreetmap.org/search?format=json&q='+encodeURIComponent(val));
 const data=await resp.json();
@@ -267,6 +248,8 @@ map.flyTo([data[0].lat,data[0].lon],15);
 buscarDatos();
 }
 };
+document.querySelectorAll("#filters input,#onlyOpen,#greyClosed")
+.forEach(el=>el.onchange=render);
 
 });
 </script>
