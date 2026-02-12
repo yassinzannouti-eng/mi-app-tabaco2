@@ -1,136 +1,100 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mapa de Locales</title>
+    <meta charset="UTF-8">
+    <title>Web con Geolocalización</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 40px;
+            background-color: #f5f5f5;
+        }
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            max-width: 500px;
+            margin: auto;
+        }
 
-<style>
-html, body {
-    margin: 0;
-    padding: 0;
-    height: 100%;
-}
-#map {
-    height: 100%;
-}
-#searchAreaBtn {
-    position: absolute;
-    top: 15px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 1000;
-    padding: 10px 18px;
-    border: none;
-    border-radius: 25px;
-    background: #000;
-    color: white;
-    font-size: 14px;
-    cursor: pointer;
-}
-</style>
+        h1 {
+            margin-bottom: 20px;
+        }
+
+        .loading {
+            color: #666;
+        }
+
+        .error {
+            color: #c0392b;
+        }
+
+        .success {
+            color: #27ae60;
+        }
+    </style>
 </head>
 
 <body>
 
-<button id="searchAreaBtn">Buscar en esta área</button>
-<div id="map"></div>
+    <div class="card">
+        <h1>Mi Aplicación</h1>
+        <div id="contenido" class="loading">
+            Obteniendo tu ubicación...
+        </div>
+    </div>
 
-<script>
-let map;
-let userMarker;
-let markersLayer = L.layerGroup();
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
 
-function initMap(lat = 40.4168, lng = -3.7038) {
+            const contenido = document.getElementById("contenido");
 
-    map = L.map('map').setView([lat, lng], 14);
-
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(map);
-
-    markersLayer.addTo(map);
-
-    loadPlaces();
-
-    // Botón buscar en esta área
-    document.getElementById("searchAreaBtn").addEventListener("click", () => {
-        loadPlaces();
-    });
-}
-
-// Solicita ubicación automáticamente al entrar
-window.onload = function () {
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-            (position) => {
-                initMap(position.coords.latitude, position.coords.longitude);
-                addUserMarker(position.coords.latitude, position.coords.longitude);
-            },
-            () => {
-                initMap(); // Si deniega permiso carga Madrid por defecto
+            if (!("geolocation" in navigator)) {
+                mostrarSinUbicacion("Tu navegador no soporta geolocalización.");
+                return;
             }
-        );
-    } else {
-        initMap();
-    }
-};
 
-function addUserMarker(lat, lng) {
-    userMarker = L.marker([lat, lng]).addTo(map)
-        .bindPopup("Tu ubicación")
-        .openPopup();
-}
+            navigator.geolocation.getCurrentPosition(
+                function (position) {
+                    const lat = position.coords.latitude;
+                    const lon = position.coords.longitude;
 
-// Simulación de datos (aquí puedes conectar tu API real)
-function loadPlaces() {
+                    mostrarConUbicacion(lat, lon);
+                },
+                function (error) {
+                    mostrarSinUbicacion("No se pudo obtener la ubicación o fue denegada.");
+                },
+                {
+                    enableHighAccuracy: false,
+                    timeout: 10000,
+                    maximumAge: 0
+                }
+            );
 
-    markersLayer.clearLayers();
+            function mostrarConUbicacion(lat, lon) {
+                contenido.className = "success";
+                contenido.innerHTML = `
+                    <strong>Ubicación obtenida correctamente:</strong><br><br>
+                    Latitud: ${lat}<br>
+                    Longitud: ${lon}
+                `;
+            }
 
-    const bounds = map.getBounds();
-    const center = map.getCenter();
+            function mostrarSinUbicacion(mensaje) {
+                contenido.className = "error";
+                contenido.innerHTML = `
+                    <strong>Ubicación no disponible</strong><br><br>
+                    ${mensaje}
+                `;
+            }
 
-    // Ejemplo de locales (sustituye por tu backend si lo tienes)
-    const places = [
-        {
-            name: "Bar Central",
-            lat: center.lat + 0.01,
-            lng: center.lng + 0.01,
-            address: "Calle Mayor 10, Madrid"
-        },
-        {
-            name: "Café Norte",
-            lat: center.lat - 0.008,
-            lng: center.lng - 0.01,
-            address: "Gran Vía 22, Madrid"
-        }
-    ];
-
-    places.forEach(place => {
-
-        if (bounds.contains([place.lat, place.lng])) {
-
-            const marker = L.marker([place.lat, place.lng]);
-
-            const googleMapsLink =
-                `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name + " " + place.address)}`;
-
-            marker.bindPopup(`
-                <b>${place.name}</b><br>
-                ${place.address}<br><br>
-                <a href="${googleMapsLink}" target="_blank">
-                    Ver en Maps
-                </a>
-            `);
-
-            markersLayer.addLayer(marker);
-        }
-    });
-}
-</script>
+        });
+    </script>
 
 </body>
 </html>
