@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Vaper Tracker Web Completo</title>
+<title>Vaper & Tabaco Tracker</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
@@ -12,38 +12,17 @@
 <style>
 html, body {height:100%; margin:0; font-family:Arial,sans-serif;}
 #map{height:100%; width:100%;}
-#menuButton{
-  position:fixed; top:15px; left:15px; z-index:2000;
-  background:white; border:none; padding:10px; border-radius:8px;
-  box-shadow:0 3px 8px rgba(0,0,0,0.2); cursor:pointer;
-}
-#panel{
-  position:fixed; top:0; left:-260px; width:240px; height:100%;
-  background:white; z-index:2100; padding:20px;
-  box-shadow:2px 0 15px rgba(0,0,0,0.2);
-  transition:.3s; overflow:auto;
-}
+#menuButton{position:fixed; top:15px; left:15px; z-index:2000; background:white; border:none; padding:10px; border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,0.25); cursor:pointer;}
+#panel{position:fixed; top:0; left:-270px; width:250px; height:100%; background:rgba(255,255,255,0.95); z-index:2100; padding:20px; box-shadow:2px 0 15px rgba(0,0,0,0.25); transition:.3s; overflow:auto; border-radius:0 12px 12px 0;}
 #panel.active{left:0;}
-.search-bar{
-  position:absolute; top:15px; left:50%; transform:translateX(-50%);
-  z-index:1500; display:flex; background:white; border-radius:25px;
-  box-shadow:0 4px 15px rgba(0,0,0,0.18); overflow:hidden;
-}
-.search-bar input{padding:10px; border:none; outline:none;}
-.search-bar button{padding:10px; border:none; background:#2563eb; color:white; cursor:pointer;}
-.btn-locate{
-  position:absolute; bottom:100px; right:20px; z-index:1500;
-  width:48px; height:48px; background:#2563eb; border-radius:50%;
-  display:flex; align-items:center; justify-content:center;
-  box-shadow:0 3px 12px rgba(0,0,0,0.25); border:none; cursor:pointer; color:white; font-size:22px;
-}
-.btn-add-manual{
-  position:absolute; bottom:30px; left:20px; z-index:1500;
-  background:rgba(255,255,255,0.95); border:1px solid #ccc; padding:7px 14px; border-radius:18px;
-  font-size:12px; font-weight:bold; cursor:pointer; color:#444; box-shadow:0 2px 6px rgba(0,0,0,0.12);
-}
-.legend-item{display:flex; align-items:center; margin-bottom:5px;}
-.legend-color{width:15px; height:15px; border-radius:4px; margin-right:6px;}
+.search-bar{position:absolute; top:15px; left:50%; transform:translateX(-50%); z-index:1500; display:flex; background:white; border-radius:25px; box-shadow:0 4px 15px rgba(0,0,0,0.18); overflow:hidden; width:85%; max-width:400px;}
+.search-bar input{flex:1; padding:10px; border:none; outline:none;}
+.search-bar button{padding:10px; border:none; background:#2563eb; color:white; cursor:pointer; transition:.2s;}
+.search-bar button:hover{background:#1e4eb8;}
+.btn-locate{position:absolute; bottom:100px; right:20px; z-index:1500; width:50px; height:50px; background:#2563eb; border-radius:50%; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 12px rgba(0,0,0,0.25); border:none; cursor:pointer; color:white; font-size:24px;}
+.btn-add-manual{position:absolute; bottom:30px; left:20px; z-index:1500; background:rgba(255,255,255,0.95); border:1px solid #ccc; padding:8px 14px; border-radius:18px; font-size:13px; font-weight:bold; cursor:pointer; color:#444; box-shadow:0 2px 6px rgba(0,0,0,0.15);}
+.legend-item{display:flex; align-items:center; margin-bottom:6px;}
+.legend-color{width:18px; height:18px; border-radius:4px; margin-right:8px; border:1px solid #999;}
 .badge{font-size:12px; padding:3px 6px; border-radius:8px;}
 .open{background:#22c55e;color:white;}
 .closed{background:#ef4444;color:white;}
@@ -59,12 +38,9 @@ html, body {height:100%; margin:0; font-family:Arial,sans-serif;}
 <input type="text" id="searchName" placeholder="Buscar por nombre">
 <hr>
 <h4>Tipos de locales</h4>
-<label class="legend-item"><input type="checkbox" id="toggleEstanco" checked>
-  <div class="legend-color" style="background:red;"></div>Estanco</label>
-<label class="legend-item"><input type="checkbox" id="toggleTienda" checked>
-  <div class="legend-color" style="background:gold;"></div>Tienda/Bazar</label>
-<label class="legend-item"><input type="checkbox" id="toggleBar" checked>
-  <div class="legend-color" style="background:purple;"></div>Bar/Cafetería</label>
+<label class="legend-item"><input type="checkbox" id="toggleEstanco" checked><div class="legend-color" style="background:red;"></div>Estanco</label>
+<label class="legend-item"><input type="checkbox" id="toggleVaper" checked><div class="legend-color" style="background:darkblue;"></div>Vaper</label>
+<label class="legend-item"><input type="checkbox" id="toggleMisc" checked><div class="legend-color" style="background:green;"></div>Miscelánea</label>
 </div>
 
 <button id="menuButton">☰</button>
@@ -93,25 +69,32 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{
 const cluster=L.markerClusterGroup();
 map.addLayer(cluster);
 
+// Usuario y GPS
 let userLocation=null;
-map.locate({enableHighAccuracy:true, watch:true});
-map.on('locationfound',e=>{userLocation=e.latlng;});
+const userMarker=L.circleMarker([0,0],{radius:10,color:"#2563eb",weight:2,fillColor:"#2563eb",fillOpacity:0.7}).addTo(map);
+if(navigator.geolocation){
+  navigator.geolocation.watchPosition(pos=>{
+    const lat=pos.coords.latitude;
+    const lon=pos.coords.longitude;
+    userLocation={lat,lon};
+    userMarker.setLatLng([lat,lon]);
+  },err=>console.log("GPS error:",err),{enableHighAccuracy:true, maximumAge:0, timeout:5000});
+}
 
-function icon(color){return L.icon({
-iconUrl:`https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
-shadowUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-iconSize:[25,41],iconAnchor:[12,41]})}
+// Iconos vectoriales simples
+function icon(color){return L.icon({iconUrl:`https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,shadowUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',iconSize:[25,41],iconAnchor:[12,41]})}
 
 const icons={
 estanco:icon("red"),
-tienda:icon("gold"),
-bar:icon("purple"),
+vaper:icon("darkblue"),
+misc:icon("green"),
 grey:icon("grey")
 };
 
 let elementsData=[];
-let filter={estanco:true,tienda:true,bar:true};
+let filter={estanco:true,vaper:true,misc:true};
 
+// Analizar horario
 function analizarHorario(opening){
 if(!opening) return {estado:null,texto:"<span class='badge closed'>Horario desconocido</span>"};
 if(opening.includes("24/7")) return {estado:true,texto:"<span class='badge open'>24/7</span>"};
@@ -127,14 +110,17 @@ if(min>=mi && min<=mf) return {estado:true,texto:"<span class='badge open'>Abier
 return {estado:false,texto:"<span class='badge closed'>Cerrado</span>"};
 }
 
+// Buscar datos Overpass
 async function buscarDatos(){
 cluster.clearLayers();
 const c=map.getCenter();
 const r=6000;
-const query=`[out:json];
-(node["shop"="tobacco"](around:${r},${c.lat},${c.lng});
-node["shop"~"convenience|variety_store"](around:${r},${c.lat},${c.lng});
+const query=`[out:json][timeout:25];
+(
+node["shop"="tobacco"](around:${r},${c.lat},${c.lng});
+node["shop"~"vape|convenience|supermarket"](around:${r},${c.lat},${c.lng});
 node["amenity"="bar"](around:${r},${c.lat},${c.lng});
+node["amenity"="fuel"](around:${r},${c.lat},${c.lng});
 );out;`;
 try{
 const resp=await fetch("https://overpass-api.de/api/interpreter",{method:"POST",body:query});
@@ -144,6 +130,7 @@ render();
 }catch(e){console.log("Error Overpass",e);}
 }
 
+// Renderizar marcadores
 function render(){
 cluster.clearLayers();
 const onlyOpen=document.getElementById("onlyOpen").checked;
@@ -151,21 +138,30 @@ const greyClosed=document.getElementById("greyClosed").checked;
 const search=document.getElementById("searchName").value.toLowerCase();
 
 elementsData.forEach(p=>{
-const tipo=p.tags?.shop==="tobacco"?"estanco":p.tags?.shop?"tienda":"bar";
+// Determinar tipo
+let tipo="misc"; 
+if(p.tags?.shop==="tobacco") tipo="estanco";
+else if(p.tags?.shop==="vape") tipo="vaper";
+
 if(!filter[tipo]) return;
 if(search && !p.tags?.name?.toLowerCase().includes(search)) return;
+
+// Horario
 const horario=analizarHorario(p.tags?.opening_hours);
 if(onlyOpen && horario.estado===false) return;
 
+// Icono gris si cerrado
 let icono=icons[tipo];
 if(horario.estado===false && greyClosed) icono=icons.grey;
 
-const marker=L.marker([p.lat,p.lon],{icon:icono});
-marker.bindPopup(`
-<b>${p.tags?.name||tipo}</b><br>
-${horario.texto}<br>
-<a href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}" target="_blank">Cómo llegar</a>
-`);
+// Popup indicando Tabaco y Vaper
+const tieneTabaco=p.tags?.shop==="tobacco"||p.tags?.shop==="vape";
+const tieneVaper=p.tags?.shop==="vape"||p.tags?.vending?.includes("vapers")||tieneTabaco;
+const popupHTML=`<b>${p.tags?.name||tipo}</b><br>${horario.texto}<br>
+Tabaco: ✅<br>Vaper: ${tieneVaper?"✅":"❌"}<br>
+<a href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}" target="_blank">Cómo llegar</a>`;
+
+const marker=L.marker([p.lat,p.lon],{icon:icono}).bindPopup(popupHTML);
 cluster.addLayer(marker);
 });
 }
@@ -176,8 +172,8 @@ document.getElementById("onlyOpen").onchange=render;
 document.getElementById("greyClosed").onchange=render;
 document.getElementById("searchName").oninput=render;
 document.getElementById("toggleEstanco").onchange=e=>{filter.estanco=e.target.checked; render();}
-document.getElementById("toggleTienda").onchange=e=>{filter.tienda=e.target.checked; render();}
-document.getElementById("toggleBar").onchange=e=>{filter.bar=e.target.checked; render();}
+document.getElementById("toggleVaper").onchange=e=>{filter.vaper=e.target.checked; render();}
+document.getElementById("toggleMisc").onchange=e=>{filter.misc=e.target.checked; render();}
 
 // Botón localizar usuario
 document.getElementById("locateBtn").onclick=()=>{if(userLocation) map.flyTo(userLocation,16);};
@@ -193,10 +189,10 @@ const data=await resp.json();
 if(data.length) map.flyTo([data[0].lat,data[0].lon],14);
 };
 
-// Refrescar al mover mapa
+// Actualizar datos al mover mapa
 map.on("moveend",buscarDatos);
 
-// Carga inicial
+// Primera carga
 setTimeout(buscarDatos,1500);
 
 });
