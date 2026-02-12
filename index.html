@@ -1,1 +1,247 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vaper Tracker Pro</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+<style>
+html,body{height:100%;margin:0;font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background:#f5f5f7;}
+#map{height:100%;width:100%;display:none;}
+
+#overlay{
+position:fixed; top:0;left:0; width:100%;height:100%;
+background:white; display:flex; flex-direction:column;
+align-items:center; justify-content:center; z-index:5000;
+font-size:18px; text-align:center; padding:20px; gap:20px;
+}
+
+#overlay button{
+padding:12px 24px; border:none; background:#007aff;
+color:white; border-radius:12px; cursor:pointer; font-weight: 600;
+}
+
+#menuButton{
+position:fixed;top:15px;left:15px;z-index:2000;
+background:rgba(255,255,255,0.9);border:none;padding:12px;
+border-radius:14px;box-shadow:0 4px 15px rgba(0,0,0,0.1);
+cursor:pointer; backdrop-filter: blur(5px);
+}
+
+#panel{
+position:fixed;top:0;left:-280px;width:260px;height:100%;
+background:white;z-index:2100;padding:25px;
+box-shadow:4px 0 20px rgba(0,0,0,0.1);
+transition:.3s cubic-bezier(0.4, 0, 0.2, 1);overflow:auto;
+}
+#panel.active{left:0;}
+
+.search-bar{
+position:absolute;top:15px;left:50%;
+transform:translateX(-50%);
+z-index:1500;display:flex;background:rgba(255,255,255,0.95);
+border-radius:18px;box-shadow:0 8px 24px rgba(0,0,0,0.12);
+overflow:hidden;width:85%;max-width:420px;
+backdrop-filter: blur(10px); border: 1px solid rgba(0,0,0,0.05);
+}
+.search-bar input{flex:1;padding:14px;border:none;outline:none;font-size:16px;background:transparent;}
+.search-bar button{padding:14px 20px;border:none;background:#007aff;color:white;cursor:pointer;}
+
+.btn-pin{
+position:absolute;bottom:100px;right:20px;
+width:55px;height:55px;background:white;
+border-radius:50%;display:flex;align-items:center;
+justify-content:center;color:#007aff;font-size:24px;
+border:none;cursor:pointer;z-index:1500;
+box-shadow:0 6px 16px rgba(0,0,0,0.15);
+}
+
+.btn-search-area{
+position:absolute;bottom:30px;right:20px;
+background:#007aff;color:white;border:none;
+padding:14px 22px;border-radius:25px;
+cursor:pointer;z-index:1500; font-weight: 700;
+box-shadow:0 6px 20px rgba(0,122,255,0.3);
+}
+
+/* Popups Estilo Apple */
+.popup-container { text-align: center; min-width: 180px; padding: 5px; }
+.btn-maps { 
+    display: block; background: #007aff; color: white !important; 
+    text-align: center; padding: 12px; border-radius: 12px; 
+    text-decoration: none !important; margin-top: 12px; font-weight: 600; font-size: 14px;
+}
+.horario-info { font-size: 12px; color: #636366; display: block; margin-top: 8px; line-height: 1.4; border-top: 1px solid #f2f2f7; padding-top: 8px;}
+
+/* Estilo de los Marcadores (Estilo Apple Maps) */
+.apple-marker {
+    width: 22px; height: 22px;
+    border-radius: 50%; border: 3px solid white;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+}
+</style>
+</head>
+
+<body>
+
+<div id="overlay">
+<div id="overlayText">Localizando puntos de venta...</div>
+<button id="retryBtn" style="display:none;">Reintentar acceso</button>
+</div>
+
+<button id="menuButton">☰</button>
+
+<div id="panel">
+<h3 style="font-weight:700">Ajustes</h3>
+<label style="cursor:pointer"><input type="checkbox" id="onlyOpen"> Solo abiertos ahora</label><br><br>
+<label style="cursor:pointer"><input type="checkbox" id="greyClosed" checked> Atenuar cerrados</label>
+</div>
+
+<div class="search-bar">
+<input type="text" id="address" placeholder="Ciudad, calle o código postal">
+<button id="searchBtn">🔍</button>
+</div>
+
+<button class="btn-pin" id="pinBtn">🎯</button>
+<button class="btn-search-area" id="searchAreaBtn">BUSCAR EN ESTA ÁREA</button>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+document.addEventListener("DOMContentLoaded", async ()=>{
+
+const overlay=document.getElementById("overlay");
+const overlayText=document.getElementById("overlayText");
+const retryBtn=document.getElementById("retryBtn");
+const onlyOpen=document.getElementById("onlyOpen");
+const greyClosed=document.getElementById("greyClosed");
+
+let map,userLocation,markersLayer,userMarker,elementsData=[];
+
+/* ---------- TRADUCTOR DE HORARIOS ---------- */
+function traducirHorario(txt) {
+    if(!txt) return "Horario no especificado";
+    return txt
+        .replace(/Mo/g, "Lun").replace(/Tu/g, "Mar").replace(/We/g, "Mié")
+        .replace(/Th/g, "Jue").replace(/Fr/g, "Vie").replace(/Sa/g, "Sáb")
+        .replace(/Su/g, "Dom").replace(/24\/7/g, "Abierto 24h")
+        .replace(/off/g, "Cerrado").replace(/;/g, "<br>");
+}
+
+function iniciarGeolocalizacion(){
+    navigator.geolocation.getCurrentPosition(
+        pos=>{ iniciarMapa(pos.coords.latitude,pos.coords.longitude); },
+        err=>{ overlayText.innerHTML="Error: GPS desactivado."; retryBtn.style.display="block"; },
+        { enableHighAccuracy:true, timeout:10000 }
+    );
+}
+
+retryBtn.onclick=()=>iniciarGeolocalizacion();
+
+function iniciarMapa(lat,lon){
+    userLocation={lat,lon};
+    overlay.style.display="none";
+    document.getElementById("map").style.display="block";
+
+    // Mapa Estilo Apple (Voyager)
+    map=L.map('map', {zoomControl: false}).setView([lat,lon],16);
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{
+        attribution:'©OSM'
+    }).addTo(map);
+
+    markersLayer=L.layerGroup().addTo(map);
+
+    userMarker=L.circleMarker([lat,lon],{
+        radius:10, color:"white", fillColor:"#007aff", fillOpacity:1, weight: 3
+    }).addTo(map);
+
+    buscarDatos();
+}
+
+async function buscarDatos(){
+    const c=map.getCenter();
+    const radio = 2500;
+
+    const query=`[out:json][timeout:25];
+    (
+      node["shop"="tobacco"](around:${radio},${c.lat},${c.lng});
+      node["shop"="supermarket"](around:${radio},${c.lat},${c.lng});
+      node["shop"="variety_store"](around:${radio},${c.lat},${c.lng});
+      node["shop"="convenience"](around:${radio},${c.lat},${c.lng});
+      node["amenity"="fuel"](around:${radio},${c.lat},${c.lng});
+    );
+    out;`;
+
+    try {
+        const resp=await fetch("https://overpass-api.de/api/interpreter",{method:"POST",body:"data=" + encodeURIComponent(query)});
+        const data=await resp.json();
+        elementsData=data.elements||[];
+        render();
+    } catch(e) {
+        console.error("Error en servidor");
+    }
+}
+
+function render(){
+    markersLayer.clearLayers();
+
+    elementsData.forEach(p=>{
+        let appleColor="#8e8e93"; // Gris bazar
+        if(p.tags?.shop==="tobacco") appleColor="#ff3b30"; // Rojo Estanco
+        else if(p.tags?.amenity==="fuel") appleColor="#ff9500"; // Naranja Gasolinera
+        else if(p.tags?.shop==="supermarket") appleColor="#34c759"; // Verde Super
+
+        const horarioRaw = p.tags?.opening_hours || "";
+        const horarioEsp = traducirHorario(horarioRaw);
+        const nombre = p.tags?.name || "Local de venta";
+
+        // Enlace Web Maps
+        const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(nombre + " " + (p.tags["addr:city"] || ""))}`;
+
+        // Marcador estilo Apple
+        const appleIcon = L.divIcon({
+            className: 'custom-div-icon',
+            html: `<div class="apple-marker" style="background:${appleColor};"></div>`,
+            iconSize: [28, 28],
+            iconAnchor: [14, 14],
+            popupAnchor: [0, -10]
+        });
+
+        L.marker([p.lat,p.lon],{icon: appleIcon})
+        .bindPopup(`
+            <div class="popup-container">
+                <strong style="font-size:16px;">${nombre}</strong><br>
+                <span class="horario-info"><b>Horario:</b><br>${horarioEsp}</span>
+                <a href="${mapsUrl}" target="_blank" class="btn-maps">VER EN MAPS</a>
+            </div>
+        `)
+        .addTo(markersLayer);
+    });
+}
+
+document.getElementById("menuButton").onclick=()=>document.getElementById("panel").classList.toggle("active");
+document.getElementById("pinBtn").onclick=()=>map.flyTo([userLocation.lat,userLocation.lon],17);
+document.getElementById("searchAreaBtn").onclick=buscarDatos;
+
+document.getElementById("searchBtn").onclick=async()=>{
+    const val = document.getElementById("address").value;
+    if(!val) return;
+    const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${val}`);
+    const d = await r.json();
+    if(d.length>0){
+        map.setView([d[0].lat, d[0].lon], 16);
+        buscarDatos();
+    }
+};
+
+iniciarGeolocalizacion();
+});
+</script>
+</body>
+</html>
 
