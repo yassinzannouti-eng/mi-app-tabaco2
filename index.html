@@ -9,9 +9,20 @@
 
 <style>
 html,body{height:100%;margin:0;font-family:Arial;}
-#map{height:100%;width:100%;}
+#map{height:100%;width:100%;display:none;}
 
-/* PANEL IZQUIERDA */
+#loading{
+position:fixed;
+top:0;left:0;
+width:100%;height:100%;
+display:flex;
+align-items:center;
+justify-content:center;
+background:white;
+z-index:5000;
+font-size:18px;
+}
+
 #menuButton{
 position:fixed;top:15px;left:15px;z-index:2000;
 background:white;border:none;padding:10px;
@@ -26,7 +37,6 @@ transition:.3s;overflow:auto;
 }
 #panel.active{left:0;}
 
-/* BUSCADOR */
 .search-bar{
 position:absolute;top:15px;left:50%;
 transform:translateX(-50%);
@@ -37,7 +47,6 @@ overflow:hidden;width:85%;max-width:400px;
 .search-bar input{flex:1;padding:10px;border:none;outline:none;}
 .search-bar button{padding:10px;border:none;background:#2563eb;color:white;cursor:pointer;}
 
-/* BOTONES */
 .btn-pin{
 position:absolute;bottom:100px;right:20px;
 width:50px;height:50px;background:#2563eb;
@@ -54,7 +63,6 @@ cursor:pointer;z-index:1500;
 box-shadow:0 3px 10px rgba(0,0,0,0.3);
 }
 
-/* FILTROS INFERIORES */
 #filters{
 position:absolute;bottom:30px;left:50%;
 transform:translateX(-50%);
@@ -64,16 +72,15 @@ z-index:1500;box-shadow:0 3px 10px rgba(0,0,0,0.25);
 font-size:14px;
 }
 
-.badge{
-padding:3px 6px;border-radius:6px;
-color:white;font-size:12px;
-}
+.badge{padding:3px 6px;border-radius:6px;color:white;font-size:12px;}
 .open{background:#22c55e;}
 .closed{background:#ef4444;}
 </style>
 </head>
 
 <body>
+
+<div id="loading">Solicitando ubicación...</div>
 
 <button id="menuButton">☰</button>
 
@@ -105,75 +112,58 @@ color:white;font-size:12px;
 <script>
 document.addEventListener("DOMContentLoaded",()=>{
 
-let userLocation=null;
-let elementsData=[];
-let markersLayer=L.layerGroup();
+if(!navigator.geolocation){
+alert("Tu navegador no soporta geolocalización.");
+return;
+}
 
-const map=L.map('map');
+navigator.geolocation.getCurrentPosition(
+pos=>iniciar(pos.coords.latitude,pos.coords.longitude),
+()=>alert("Debes permitir la ubicación para usar la aplicación."),
+{enableHighAccuracy:true,timeout:10000}
+);
+
+let map,userMarker,userLocation,elementsData=[];
+let markersLayer;
+
+function iniciar(lat,lon){
+
+document.getElementById("loading").style.display="none";
+document.getElementById("map").style.display="block";
+
+userLocation={lat,lon};
+
+map=L.map('map').setView([lat,lon],15);
+
 L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{
 attribution:'©OpenStreetMap ©CARTO'
 }).addTo(map);
 
-map.addLayer(markersLayer);
+markersLayer=L.layerGroup().addTo(map);
 
-const userMarker=L.circleMarker([0,0],{
+userMarker=L.circleMarker([lat,lon],{
 radius:8,color:"#2563eb",
 fillColor:"#2563eb",fillOpacity:0.9
 }).addTo(map);
 
-/* ICONOS */
-function icon(color){
-return L.icon({
-iconUrl:`https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
-shadowUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-iconSize:[25,41],iconAnchor:[12,41]
-});
-}
-const icons={
-estanco:icon("red"),
-super:icon("green"),
-bazar:icon("violet"),
-gas:icon("yellow"),
-grey:icon("grey")
-};
-
-/* GEOLOCALIZACIÓN INMEDIATA */
-navigator.geolocation.getCurrentPosition(pos=>{
-iniciarMapa(pos.coords.latitude,pos.coords.longitude);
-},()=>{
-fetch("https://ipapi.co/json/")
-.then(r=>r.json())
-.then(data=>iniciarMapa(data.latitude,data.longitude));
-});
-
-function iniciarMapa(lat,lon){
-userLocation={lat,lon};
-map.setView([lat,lon],15);
-userMarker.setLatLng([lat,lon]);
 buscarDatos();
 }
 
-/* HORARIOS */
-function analizarHorario(opening){
-if(!opening) return {estado:null,texto:"Horario desconocido"};
-if(opening.includes("24/7")) return {estado:true,texto:"<span class='badge open'>24/7</span>"};
-
-const now=new Date();
-const min=now.getHours()*60+now.getMinutes();
-const rangos=[...opening.matchAll(/(\d{2}:\d{2})-(\d{2}:\d{2})/g)];
-
-for(let r of rangos){
-const ini=r[1].split(":");
-const fin=r[2].split(":");
-const mi=parseInt(ini[0])*60+parseInt(ini[1]);
-const mf=parseInt(fin[0])*60+parseInt(fin[1]);
-if(min>=mi && min<=mf) return {estado:true,texto:"<span class='badge open'>Abierto</span>"};
-}
-return {estado:false,texto:"<span class='badge closed'>Cerrado</span>"};
+/* CACHE POR ZONA */
+function cacheKey(){
+const c=map.getCenter();
+return `${c.lat.toFixed(2)}_${c.lng.toFixed(2)}_${map.getZoom()}`;
 }
 
-/* BUSCAR DATOS */
 async function buscarDatos(){
+
+const key=cacheKey();
+if(localStorage.getItem(key)){
+elementsData=JSON.parse(localStorage.getItem(key));
+render();
+return;
+}
+
 const zoom=map.getZoom();
 const radio=zoom>=16?2000:zoom>=14?4000:6000;
 const c=map.getCenter();
@@ -190,36 +180,52 @@ out;`;
 const resp=await fetch("https://overpass-api.de/api/interpreter",{method:"POST",body:query});
 const data=await resp.json();
 elementsData=data.elements||[];
+
+localStorage.setItem(key,JSON.stringify(elementsData));
+
 render();
+}
+
+/* HORARIOS */
+function analizarHorario(opening){
+if(!opening) return {estado:null,texto:"Horario desconocido"};
+if(opening.includes("24/7")) return {estado:true,texto:"<span class='badge open'>24/7</span>"};
+const now=new Date();
+const min=now.getHours()*60+now.getMinutes();
+const rangos=[...opening.matchAll(/(\d{2}:\d{2})-(\d{2}:\d{2})/g)];
+for(let r of rangos){
+const mi=parseInt(r[1].slice(0,2))*60+parseInt(r[1].slice(3));
+const mf=parseInt(r[2].slice(0,2))*60+parseInt(r[2].slice(3));
+if(min>=mi&&min<=mf) return {estado:true,texto:"<span class='badge open'>Abierto</span>"};
+}
+return {estado:false,texto:"<span class='badge closed'>Cerrado</span>"};
 }
 
 /* RENDER */
 function render(){
 markersLayer.clearLayers();
 
-const filtros={
-estanco:fEstanco.checked,
-super:fSuper.checked,
-bazar:fBazar.checked,
-gas:fGas.checked
-};
-
 elementsData.forEach(p=>{
 let tipo=null;
-if(p.tags?.shop==="tobacco") tipo="estanco";
-else if(p.tags?.shop==="supermarket") tipo="super";
-else if(p.tags?.shop==="variety_store") tipo="bazar";
-else if(p.tags?.amenity==="fuel") tipo="gas";
-
-if(!tipo||!filtros[tipo]) return;
+if(p.tags?.shop==="tobacco") tipo="red";
+else if(p.tags?.shop==="supermarket") tipo="green";
+else if(p.tags?.shop==="variety_store") tipo="violet";
+else if(p.tags?.amenity==="fuel") tipo="yellow";
+if(!tipo) return;
 
 const horario=analizarHorario(p.tags?.opening_hours);
 if(onlyOpen.checked && horario.estado===false) return;
 
-let icono=icons[tipo];
-if(horario.estado===false && greyClosed.checked) icono=icons.grey;
+let iconColor=tipo;
+if(horario.estado===false && greyClosed.checked) iconColor="grey";
 
-const nombre=p.tags?.name||tipo;
+const icon=L.icon({
+iconUrl:`https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${iconColor}.png`,
+shadowUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+iconSize:[25,41],iconAnchor:[12,41]
+});
+
+const nombre=p.tags?.name||"Local";
 
 const popup=`
 <b>${nombre}</b><br>
@@ -228,7 +234,7 @@ ${horario.texto}<br><br>
 target="_blank">Cómo llegar</a>
 `;
 
-L.marker([p.lat,p.lon],{icon:icono})
+L.marker([p.lat,p.lon],{icon})
 .bindPopup(popup)
 .addTo(markersLayer);
 });
@@ -236,23 +242,12 @@ L.marker([p.lat,p.lon],{icon:icono})
 
 /* EVENTOS */
 menuButton.onclick=()=>panel.classList.toggle("active");
-pinBtn.onclick=()=>{if(userLocation) map.flyTo(userLocation,16);}
+pinBtn.onclick=()=>map.flyTo(userLocation,16);
 searchAreaBtn.onclick=buscarDatos;
-searchBtn.onclick=async()=>{
-const val=address.value;
-if(!val) return;
-const resp=await fetch('https://nominatim.openstreetmap.org/search?format=json&q='+encodeURIComponent(val));
-const data=await resp.json();
-if(data.length){
-map.flyTo([data[0].lat,data[0].lon],15);
-buscarDatos();
-}
-};
 document.querySelectorAll("#filters input,#onlyOpen,#greyClosed")
 .forEach(el=>el.onchange=render);
 
 });
 </script>
-
 </body>
 </html>
