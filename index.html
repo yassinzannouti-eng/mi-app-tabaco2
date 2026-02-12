@@ -28,9 +28,12 @@ html, body {height:100%; margin:0; font-family:Arial,sans-serif;}
 .open{background:#22c55e;color:white;}
 .closed{background:#ef4444;color:white;}
 #miscFilters{position:fixed; bottom:80px; left:50%; transform:translateX(-50%); z-index:1500; background:rgba(255,255,255,0.95); padding:10px 15px; border-radius:12px; box-shadow:0 3px 10px rgba(0,0,0,0.2); display:flex; gap:10px; flex-wrap:wrap; justify-content:center;}
+#locationAlert{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:20px;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:3000;text-align:center;font-size:16px;display:none;}
 </style>
 </head>
 <body>
+
+<div id="locationAlert">📍 Necesitamos tu ubicación para mostrar locales. Por favor habilita el GPS y recarga la página.</div>
 
 <div id="panel">
 <h3>Filtros</h3>
@@ -67,33 +70,53 @@ html, body {height:100%; margin:0; font-family:Arial,sans-serif;}
 <script>
 document.addEventListener("DOMContentLoaded",()=>{
 
-const map=L.map('map',{minZoom:12,maxZoom:19}).setView([40.4168,-3.7038],14);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{
-  attribution:'©OpenStreetMap ©CARTO'
-}).addTo(map);
-
+// Inicializar mapa
+const map=L.map('map',{minZoom:12,maxZoom:19});
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{attribution:'©OpenStreetMap ©CARTO'}).addTo(map);
 const cluster=L.markerClusterGroup();
 map.addLayer(cluster);
 
-// Usuario y GPS muy preciso
-let userLocation=null;
-const userMarker=L.circleMarker([0,0],{radius:10,color:"#2563eb",weight:2,fillColor:"#2563eb",fillOpacity:0.7}).addTo(map);
-if(navigator.geolocation){
-  navigator.geolocation.watchPosition(pos=>{
-    const lat=pos.coords.latitude;
-    const lon=pos.coords.longitude;
-    userLocation={lat,lon};
-    userMarker.setLatLng([lat,lon]);
-  },err=>console.log("GPS error:",err),{enableHighAccuracy:true, maximumAge:0, timeout:5000});
-}
-
-// Iconos modernos estilo iOS
+// Iconos
 function icon(color){return L.icon({iconUrl:`https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,shadowUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',iconSize:[25,41],iconAnchor:[12,41]})}
 const icons={estanco:icon("red"),super:icon("green"),bazar:icon("orange"),gas:icon("purple"),cafe:icon("blue"),grey:icon("grey")};
 
 let elementsData=[];
 let filter={estanco:true,super:true,bazar:true,gas:true,cafe:true};
+let userLocation=null;
 
+// Forzar que la app solo funcione con ubicación
+function startAppWithLocation(lat,lon){
+  userLocation={lat,lon};
+  map.setView([lat,lon],14);
+  const userMarker=L.circleMarker([lat,lon],{radius:10,color:"#2563eb",weight:2,fillColor:"#2563eb",fillOpacity:0.7}).addTo(map);
+
+  // Geolocalización continua
+  if(navigator.geolocation){
+    navigator.geolocation.watchPosition(pos=>{
+      const lat=pos.coords.latitude;
+      const lon=pos.coords.longitude;
+      userLocation={lat,lon};
+      userMarker.setLatLng([lat,lon]);
+    },err=>console.log(err),{enableHighAccuracy:true, maximumAge:0, timeout:5000});
+  }
+
+  buscarDatos();
+}
+
+// Solicitar ubicación al cargar
+if(navigator.geolocation){
+  navigator.geolocation.getCurrentPosition(pos=>{
+    document.getElementById("locationAlert").style.display="none";
+    startAppWithLocation(pos.coords.latitude,pos.coords.longitude);
+  },err=>{
+    document.getElementById("locationAlert").style.display="block";
+    console.log("Usuario no dio permiso GPS");
+  },{enableHighAccuracy:true, timeout:7000});
+}else{
+  document.getElementById("locationAlert").style.display="block";
+}
+
+// Analizar horario
 function analizarHorario(opening){
 if(!opening) return {estado:null,texto:"<span class='badge closed'>Horario desconocido</span>"};
 if(opening.includes("24/7")) return {estado:true,texto:"<span class='badge open'>24/7</span>"};
@@ -109,10 +132,11 @@ if(min>=mi && min<=mf) return {estado:true,texto:"<span class='badge open'>Abier
 return {estado:false,texto:"<span class='badge closed'>Cerrado</span>"};
 }
 
-// Buscar datos Overpass incluyendo bares/cafeterías con vending
+// Buscar datos Overpass
 async function buscarDatos(){
+if(!userLocation) return;
 cluster.clearLayers();
-const c=map.getCenter();
+const c=userLocation;
 const r=5000;
 const query=`[out:json][timeout:25];
 (
@@ -131,6 +155,7 @@ render();
 }catch(e){console.log("Error Overpass",e);}
 }
 
+// Renderizar marcadores
 function render(){
 cluster.clearLayers();
 const onlyOpen=document.getElementById("onlyOpen").checked;
@@ -164,7 +189,7 @@ cluster.addLayer(marker);
 });
 }
 
-// Panel y filtros
+// Filtros y botones
 document.getElementById("menuButton").onclick=()=>document.getElementById("panel").classList.toggle("active");
 document.getElementById("onlyOpen").onchange=render;
 document.getElementById("greyClosed").onchange=render;
@@ -174,33 +199,21 @@ document.getElementById("toggleSuper").onchange=e=>{filter.super=e.target.checke
 document.getElementById("toggleBazar").onchange=e=>{filter.bazar=e.target.checked; render();}
 document.getElementById("toggleGas").onchange=e=>{filter.gas=e.target.checked; render();}
 document.getElementById("toggleCafe").onchange=e=>{filter.cafe=e.target.checked; render();}
-
-// Botón localizar usuario
-document.getElementById("locateBtn").onclick=()=>{if(userLocation) map.flyTo(userLocation,16);};
-
-// Añadir local manual
+document.getElementById("locateBtn").onclick=()=>{if(userLocation) map.flyTo([userLocation.lat,userLocation.lon],16);};
 document.getElementById("addBtn").onclick=()=>{
 const name=prompt("Nombre del local:");
 if(!name) return;
 const type=prompt("Tipo: estanco, super, bazar, gas, cafe").toLowerCase();
 const c=map.getCenter();
 alert(`Local añadido: ${name} (${type})\nCoordenadas: ${c.lat.toFixed(6)}, ${c.lng.toFixed(6)}`);
-// Aquí podrías guardar en tu base de datos o localStorage
 };
-
-// Buscar en área actual
 document.getElementById("searchAreaBtn").onclick=buscarDatos;
-
-// Búsqueda ciudad
 document.getElementById("searchBtn").onclick=async()=>{
 const val=document.getElementById("address").value;
 const resp=await fetch('https://nominatim.openstreetmap.org/search?format=json&q='+encodeURIComponent(val));
 const data=await resp.json();
 if(data.length) map.flyTo([data[0].lat,data[0].lon],14);
 };
-
-// Primera carga
-setTimeout(buscarDatos,1500);
 
 });
 </script>
