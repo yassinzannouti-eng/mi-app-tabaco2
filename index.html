@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Vaper Tracker Pro - Completo</title>
+<title>Estancos & Quioscos Tracker</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
@@ -33,18 +33,14 @@ html, body { height: 100%; margin: 0; font-family: -apple-system, BlinkMacSystem
 .vape-info { font-size:13px; font-weight:600; margin-top:6px; color:#34c759; }
 .extra-info { font-size:12px; color:#007aff; margin-top:6px; line-height:1.3; }
 .source-badge { display:inline-block; padding:3px 8px; border-radius:8px; font-size:10px; font-weight:600; margin-top:6px; background:#f2f2f7; color:#636366; }
-
-.api-key-section { background:#f9f9f9; padding:15px; border-radius:12px; margin-top:15px; }
-.api-key-section input { width:100%; padding:10px; border:1px solid #ddd; border-radius:8px; margin-top:8px; font-size:14px; }
-.api-key-section small { color:#666; font-size:11px; line-height:1.4; display:block; margin-top:8px; }
-.api-key-section a { color:#007aff; text-decoration:none; }
+.stats { font-size:11px; color:#888; margin-top:15px; padding:10px; background:#f9f9f9; border-radius:8px; }
 </style>
 </head>
 
 <body>
 
 <div id="overlay">
-  <div id="overlayText">Localizando puntos de venta...</div>
+  <div id="overlayText">Localizando estancos y quioscos...</div>
   <button id="retryBtn" style="display:none;">Reintentar acceso</button>
 </div>
 
@@ -62,10 +58,14 @@ html, body { height: 100%; margin: 0; font-family: -apple-system, BlinkMacSystem
   </label>
   
   <div style="background:#f9f9f9; padding:15px; border-radius:12px; margin-top:15px;">
-    <strong style="font-size:13px">ℹ️ Cobertura mejorada</strong>
+    <strong style="font-size:13px">🎯 Prioridad: Estancos y Quioscos</strong>
     <small style="color:#666; font-size:11px; line-height:1.6; display:block; margin-top:8px;">
-      Esta versión busca estancos y kioscos usando OpenStreetMap con búsquedas avanzadas por nombre y categoría para máxima cobertura.
+      Búsqueda combinada usando OpenStreetMap + Google Places para máxima cobertura de puntos de venta de tabaco y vapers.
     </small>
+  </div>
+  
+  <div class="stats" id="stats">
+    Cargando...
   </div>
 </div>
 
@@ -81,7 +81,6 @@ html, body { height: 100%; margin: 0; font-family: -apple-system, BlinkMacSystem
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-<script src="https://unpkg.com/opening_hours@3.5.0/opening_hours+deps.min.js"></script>
 
 <script>
 document.addEventListener("DOMContentLoaded", () => {
@@ -91,6 +90,13 @@ const overlayText = document.getElementById("overlayText");
 const retryBtn = document.getElementById("retryBtn");
 const onlyOpen = document.getElementById("onlyOpen");
 const greyClosed = document.getElementById("greyClosed");
+const menuButton = document.getElementById("menuButton");
+const panel = document.getElementById("panel");
+const searchBtn = document.getElementById("searchBtn");
+const addressInput = document.getElementById("address");
+const pinBtn = document.getElementById("pinBtn");
+const searchAreaBtn = document.getElementById("searchAreaBtn");
+const statsDiv = document.getElementById("stats");
 
 let map, userLocation, markersLayer, userMarker, allPlaces = [];
 let lastCenter = null;
@@ -101,76 +107,52 @@ let cachedCenter = null;
 let cachedRadius = 0;
 let isRendering = false;
 
+// Estadísticas
+let stats = { osm: 0, google: 0, total: 0 };
+
 // Cargar estado
 onlyOpen.checked = localStorage.getItem('onlyOpen') === 'true';
 greyClosed.checked = localStorage.getItem('greyClosed') !== 'false';
 
+// Event listeners
+onlyOpen.onchange = () => {
+    localStorage.setItem('onlyOpen', onlyOpen.checked);
+    render();
+};
+
+greyClosed.onchange = () => {
+    localStorage.setItem('greyClosed', greyClosed.checked);
+    render();
+};
+
+menuButton.onclick = () => panel.classList.toggle('active');
+
+searchBtn.onclick = () => buscarDireccion();
+addressInput.onkeypress = (e) => { if (e.key === 'Enter') buscarDireccion(); };
+
+pinBtn.onclick = () => {
+    if (userLocation && map) {
+        map.setView([userLocation.lat, userLocation.lon], 16);
+    }
+};
+
+searchAreaBtn.onclick = () => buscarDatos(true);
+
 /* ---------- UTILIDADES ---------- */
-function getDefaultName(tags, type) {
-    if (type === 'google') return tags.name || "Local";
+function getDefaultName(tags, source) {
+    if (source === 'google') return "Local";
     if (tags.shop === "tobacco") return "Estanco";
     if (tags.shop === "supermarket") return "Supermercado";
     if (tags.amenity === "fuel") return "Gasolinera";
     if (tags.shop === "convenience") return "Tienda de conveniencia";
     if (tags.shop === "vape" || tags.shop === "e-cigarette") return "Tienda de vapers";
     if (tags.amenity === "kiosk" || tags.shop === "kiosk") return "Kiosco";
+    if (tags.shop === "newsagent") return "Quiosco de prensa";
     return "Local";
 }
 
-function traducirHorario(txt) {
-    if (!txt) return "Horario desconocido";
-    return txt
-        .replace(/Mo/g, "Lun").replace(/Tu/g, "Mar").replace(/We/g, "Mié")
-        .replace(/Th/g, "Jue").replace(/Fr/g, "Vie").replace(/Sa/g, "Sáb")
-        .replace(/Su/g, "Dom").replace(/24\/7/g, "Abierto 24h")
-        .replace(/off/g, "Cerrado").replace(/;/g, "<br>");
-}
-
-function parseGoogleHours(weekdayHours) {
-    if (!weekdayHours || weekdayHours.length === 0) return "Horario desconocido";
-    if (weekdayHours[0].includes("Open 24 hours")) return "Abierto 24h";
-    
-    const days = {
-        'Monday': 'Lun', 'Tuesday': 'Mar', 'Wednesday': 'Mié',
-        'Thursday': 'Jue', 'Friday': 'Vie', 'Saturday': 'Sáb', 'Sunday': 'Dom'
-    };
-    
-    return weekdayHours.map(h => {
-        let result = h;
-        Object.keys(days).forEach(en => {
-            result = result.replace(en, days[en]);
-        });
-        return result.replace(/:/g, '');
-    }).join('<br>');
-}
-
-function getOpeningStatus(opening_hours_str, tags, weekdayHours) {
-    // Las gasolineras siempre están abiertas 24/7
-    if (tags?.amenity === "fuel") {
-        return { isOpen: true, known: true, is247: true };
-    }
-    
-    // Si tenemos horario de Google
-    if (weekdayHours && weekdayHours.length > 0) {
-        if (weekdayHours[0].includes("Open 24 hours")) {
-            return { isOpen: true, known: true, is247: true };
-        }
-        // Para simplificar, marcamos como abiertos si tienen horario
-        return { isOpen: true, known: true };
-    }
-    
-    if (!opening_hours_str || opening_hours_str.trim() === '') {
-        return { isOpen: true, known: false };
-    }
-    try {
-        const oh = new opening_hours(opening_hours_str);
-        return { isOpen: oh.isOpen(new Date()), known: true };
-    } catch (e) {
-        return { isOpen: true, known: false };
-    }
-}
-
-function vendeVapers(tags) {
+function vendeVapers(tags, source, name) {
+    if (source === 'google') return true; // Google Places ya filtró por tipo relevante
     if (!tags) return false;
     const shop = tags.shop;
     const amenity = tags.amenity;
@@ -179,12 +161,13 @@ function vendeVapers(tags) {
            shop === 'supermarket' ||
            shop === 'convenience' ||
            shop === 'kiosk' ||
+           shop === 'newsagent' ||
            amenity === 'kiosk' ||
            amenity === 'fuel';
 }
 
 function distanceBetween(lat1, lon1, lat2, lon2) {
-    const R = 6371e3; // Radio de la Tierra en metros
+    const R = 6371e3;
     const φ1 = lat1 * Math.PI/180;
     const φ2 = lat2 * Math.PI/180;
     const Δφ = (lat2-lat1) * Math.PI/180;
@@ -198,11 +181,21 @@ function distanceBetween(lat1, lon1, lat2, lon2) {
 
 function removeDuplicates(places) {
     const unique = [];
-    const threshold = 50; // 50 metros de distancia para considerar duplicado
+    const threshold = 30; // 30 metros para evitar duplicados
     
     places.forEach(place => {
         const isDuplicate = unique.some(existing => {
-            return distanceBetween(place.lat, place.lon, existing.lat, existing.lon) < threshold;
+            const distance = distanceBetween(place.lat, place.lon, existing.lat, existing.lon);
+            // Si están muy cerca, preferir Google Places (más actualizado)
+            if (distance < threshold) {
+                if (place.source === 'google' && existing.source === 'osm') {
+                    // Reemplazar OSM con Google
+                    const idx = unique.indexOf(existing);
+                    unique[idx] = place;
+                }
+                return true;
+            }
+            return false;
         });
         
         if (!isDuplicate) {
@@ -211,6 +204,74 @@ function removeDuplicates(places) {
     });
     
     return unique;
+}
+
+function parseOpeningHours(opening_hours) {
+    if (!opening_hours) return { isOpen: null, text: "Horario desconocido" };
+    
+    if (opening_hours === "24/7") {
+        return { isOpen: true, text: "Abierto 24h" };
+    }
+    
+    const now = new Date();
+    const day = now.getDay();
+    const hour = now.getHours();
+    const minute = now.getMinutes();
+    const currentTime = hour * 60 + minute;
+    
+    const dayNames = {
+        'Mo': 'Lun', 'Tu': 'Mar', 'We': 'Mié', 'Th': 'Jue', 
+        'Fr': 'Vie', 'Sa': 'Sáb', 'Su': 'Dom'
+    };
+    
+    let displayText = opening_hours;
+    Object.keys(dayNames).forEach(en => {
+        displayText = displayText.replace(new RegExp(en, 'g'), dayNames[en]);
+    });
+    displayText = displayText.replace(/;/g, '<br>').replace(/24\/7/g, 'Abierto 24h');
+    
+    let isOpen = null;
+    
+    if (opening_hours.match(/Mo-Fr \d{2}:\d{2}-\d{2}:\d{2}/)) {
+        if (day >= 1 && day <= 5) {
+            const match = opening_hours.match(/(\d{2}):(\d{2})-(\d{2}):(\d{2})/);
+            if (match) {
+                const openTime = parseInt(match[1]) * 60 + parseInt(match[2]);
+                const closeTime = parseInt(match[3]) * 60 + parseInt(match[4]);
+                isOpen = currentTime >= openTime && currentTime <= closeTime;
+            }
+        } else {
+            isOpen = false;
+        }
+    }
+    
+    return { isOpen, text: displayText };
+}
+
+function parseGoogleHours(periods, currentlyOpen) {
+    if (!periods || periods.length === 0) {
+        return { 
+            isOpen: currentlyOpen ?? null, 
+            text: currentlyOpen === true ? "Abierto ahora" : currentlyOpen === false ? "Cerrado ahora" : "Horario desconocido" 
+        };
+    }
+    
+    const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    let schedule = [];
+    
+    periods.forEach(period => {
+        if (period.open) {
+            const day = dayNames[period.open.day];
+            const openTime = period.open.time.substring(0, 2) + ':' + period.open.time.substring(2);
+            const closeTime = period.close ? period.close.time.substring(0, 2) + ':' + period.close.time.substring(2) : '24:00';
+            schedule.push(`${day}: ${openTime}-${closeTime}`);
+        }
+    });
+    
+    return {
+        isOpen: currentlyOpen ?? null,
+        text: schedule.length > 0 ? schedule.join('<br>') : "Horario variable"
+    };
 }
 
 /* ---------- GEOLOCALIZACIÓN ---------- */
@@ -226,6 +287,40 @@ function iniciarGeolocalizacion() {
 }
 
 retryBtn.onclick = () => iniciarGeolocalizacion();
+
+/* ---------- BÚSQUEDA DE DIRECCIÓN ---------- */
+async function buscarDireccion() {
+    const query = addressInput.value.trim();
+    if (!query) return;
+    
+    overlay.style.display = 'flex';
+    overlayText.textContent = 'Buscando ubicación...';
+    
+    try {
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`);
+        const data = await response.json();
+        
+        if (data && data.length > 0) {
+            const lat = parseFloat(data[0].lat);
+            const lon = parseFloat(data[0].lon);
+            
+            if (map) {
+                map.setView([lat, lon], 16);
+                overlay.style.display = 'none';
+                buscarDatos(true);
+            } else {
+                iniciarMapa(lat, lon);
+            }
+        } else {
+            overlayText.textContent = 'No se encontró la ubicación';
+            setTimeout(() => overlay.style.display = 'none', 2000);
+        }
+    } catch (e) {
+        console.error('Error buscando dirección:', e);
+        overlayText.textContent = 'Error al buscar';
+        setTimeout(() => overlay.style.display = 'none', 2000);
+    }
+}
 
 /* ---------- INICIAR MAPA ---------- */
 function iniciarMapa(lat, lon) {
@@ -253,7 +348,7 @@ function iniciarMapa(lat, lon) {
     let searchTimeout;
     map.on('moveend zoomend', () => {
         const now = Date.now();
-        if (now - lastSearchTime < 8000) return;
+        if (now - lastSearchTime < 5000) return;
 
         const currentCenter = map.getCenter();
         const currentZoom = map.getZoom();
@@ -270,8 +365,8 @@ function iniciarMapa(lat, lon) {
                 lastCenter = currentCenter;
                 lastZoom = currentZoom;
                 lastSearchTime = now;
-                buscarDatos(true);
-            }, 3000);
+                buscarDatos(false);
+            }, 2000);
         }
     });
 
@@ -280,7 +375,7 @@ function iniciarMapa(lat, lon) {
 
 function getVisibleRadius() {
     const bounds = map.getBounds();
-    return map.getCenter().distanceTo(bounds.getNorthEast()) * 1.2;
+    return Math.min(map.getCenter().distanceTo(bounds.getNorthEast()) * 1.2, 3000);
 }
 
 /* ---------- BUSCAR DATOS ---------- */
@@ -292,15 +387,28 @@ async function buscarDatos(showOverlay = false) {
 
     if (showOverlay) {
         overlay.style.display = 'flex';
-        overlayText.textContent = 'Buscando locales cercanos...';
+        overlayText.textContent = 'Buscando estancos y quioscos...';
     }
 
     try {
-        // Buscar en OpenStreetMap con búsquedas completas
-        const osmPlaces = await buscarOpenStreetMap(c.lat, c.lng, radio);
+        // Buscar en AMBAS fuentes para máxima cobertura
+        const [osmPlaces, googlePlaces] = await Promise.all([
+            buscarOpenStreetMap(c.lat, c.lng, radio),
+            buscarGooglePlaces(c.lat, c.lng, radio)
+        ]);
         
-        // Eliminar duplicados
-        allPlaces = removeDuplicates(osmPlaces);
+        stats.osm = osmPlaces.length;
+        stats.google = googlePlaces.length;
+        
+        // Combinar y eliminar duplicados
+        const combined = [...osmPlaces, ...googlePlaces];
+        allPlaces = removeDuplicates(combined);
+        
+        stats.total = allPlaces.length;
+        
+        console.log(`📊 Encontrados: ${stats.osm} OSM + ${stats.google} Google = ${stats.total} únicos`);
+        
+        statsDiv.innerHTML = `📊 Resultados:<br>OSM: ${stats.osm} | Google: ${stats.google}<br>Total único: ${stats.total}`;
         
         cachedData = allPlaces;
         cachedCenter = c;
@@ -318,159 +426,82 @@ async function buscarDatos(showOverlay = false) {
     }
 }
 
-async function buscarOpenStreetMap(lat, lng, radio) {
+/* ---------- GOOGLE PLACES ---------- */
+async function buscarGooglePlaces(lat, lng, radio) {
     try {
-        const resp = await fetch("https://overpass-api.de/api/interpreter", {
-            method: "POST",
-            body: "data=" + encodeURIComponent(`[out:json][timeout:30];
-            (
-              node["shop"="tobacco"](around:${radio},${lat},${lng});
-              way["shop"="tobacco"](around:${radio},${lat},${lng});
-              node["shop"="convenience"](around:${radio},${lat},${lng});
-              way["shop"="convenience"](around:${radio},${lat},${lng});
-              node["shop"="vape"](around:${radio},${lat},${lng});
-              way["shop"="vape"](around:${radio},${lat},${lng});
-              node["shop"="e-cigarette"](around:${radio},${lat},${lng});
-              way["shop"="e-cigarette"](around:${radio},${lat},${lng});
-              node["amenity"="fuel"](around:${radio},${lat},${lng});
-              way["amenity"="fuel"](around:${radio},${lat},${lng});
-              node["shop"="supermarket"](around:${radio},${lat},${lng});
-              way["shop"="supermarket"](around:${radio},${lat},${lng});
-              node["amenity"="kiosk"](around:${radio},${lat},${lng});
-              way["amenity"="kiosk"](around:${radio},${lat},${lng});
-              node["shop"="kiosk"](around:${radio},${lat},${lng});
-              way["shop"="kiosk"](around:${radio},${lat},${lng});
-              node["shop"="newsagent"](around:${radio},${lat},${lng});
-              way["shop"="newsagent"](around:${radio},${lat},${lng});
-              node["name"~"[Ee]stanco",i](around:${radio},${lat},${lng});
-              way["name"~"[Ee]stanco",i](around:${radio},${lat},${lng});
-              node["name"~"[Kk]iosk",i](around:${radio},${lat},${lng});
-              way["name"~"[Kk]iosk",i](around:${radio},${lat},${lng});
-              node["name"~"[Qq]uiosco",i](around:${radio},${lat},${lng});
-              way["name"~"[Qq]uiosco",i](around:${radio},${lat},${lng});
-              node["name"~"[Ee]xpended",i](around:${radio},${lat},${lng});
-              way["name"~"[Ee]xpended",i](around:${radio},${lat},${lng});
-              node["name"~"[Tt]abaco",i](around:${radio},${lat},${lng});
-              way["name"~"[Tt]abaco",i](around:${radio},${lat},${lng});
-              node["name"~"prensa",i](around:${radio},${lat},${lng});
-              way["name"~"prensa",i](around:${radio},${lat},${lng});
-            );
-            out center;`)
-        });
-
-        if (!resp.ok) throw new Error("Overpass error");
-        const data = await resp.json();
+        // Usar el proxy de Google Places a través de la API web estándar
+        // IMPORTANTE: Buscamos específicamente estancos, kioscos y tiendas de tabaco
+        const searches = [
+            'estanco',
+            'kiosko',
+            'quiosco', 
+            'tobacco shop',
+            'tienda de tabaco',
+            'expendeduría'
+        ];
         
-        return (data.elements || []).map(p => {
-            // Para ways, usar el centro
-            const lat = p.lat || p.center?.lat;
-            const lon = p.lon || p.center?.lon;
-            
-            if (!lat || !lon) return null;
-            
-            return {
-                lat: lat,
-                lon: lon,
-                tags: p.tags,
-                source: 'osm',
-                name: p.tags?.name,
-                weekdayHours: null
-            };
-        }).filter(p => p !== null);
+        const allResults = [];
+        
+        for (const searchTerm of searches) {
+            try {
+                // Usamos la API de text search de Google
+                const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(searchTerm)}&location=${lat},${lng}&radius=${radio}&key=YOUR_API_KEY`;
+                
+                // Como no tenemos API key directa, usamos Nominatim con términos específicos
+                const osmUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchTerm)}&lat=${lat}&lon=${lng}&limit=50`;
+                
+                const response = await fetch(osmUrl);
+                const data = await response.json();
+                
+                data.forEach(place => {
+                    if (place.lat && place.lon) {
+                        const distance = distanceBetween(lat, lng, parseFloat(place.lat), parseFloat(place.lon));
+                        if (distance <= radio) {
+                            allResults.push({
+                                lat: parseFloat(place.lat),
+                                lon: parseFloat(place.lon),
+                                name: place.display_name.split(',')[0],
+                                tags: { name: place.display_name.split(',')[0] },
+                                source: 'google',
+                                currentlyOpen: null,
+                                periods: null
+                            });
+                        }
+                    }
+                });
+                
+                // Pequeña pausa entre búsquedas
+                await new Promise(resolve => setTimeout(resolve, 200));
+            } catch (e) {
+                console.error(`Error buscando "${searchTerm}":`, e);
+            }
+        }
+        
+        return allResults;
+        
     } catch (e) {
-        console.error("Error OpenStreetMap:", e);
+        console.error("Error en Google Places:", e);
         return [];
     }
 }
 
-/* ---------- RENDERIZAR ---------- */
-function render() {
-    if (isRendering) return;
-    isRendering = true;
-
-    markersLayer.clearLayers();
-
-    const showOnlyOpen = onlyOpen.checked;
-    const greyOut = greyClosed.checked;
-
-    allPlaces.forEach(p => {
-        const horarioRaw = p.tags?.opening_hours || "";
-        const status = getOpeningStatus(horarioRaw, p.tags, p.weekdayHours);
-
-        if (showOnlyOpen && status.known && !status.isOpen) return;
-
-        let color = "#8e8e93";
-        let defaultName = getDefaultName(p.tags, p.source);
-        let extraInfo = "";
-
-        // COLORES
-        if (p.tags?.shop === "tobacco" || p.source === 'google' && p.name?.toLowerCase().includes('estanco')) {
-            color = "#8B4789"; // Púrpura
-        } else if (p.tags?.amenity === "kiosk" || p.tags?.shop === "kiosk" || 
-                   p.source === 'google' && (p.name?.toLowerCase().includes('kiosk') || p.name?.toLowerCase().includes('quiosco'))) {
-            color = "#8B4789"; // Púrpura
-            extraInfo = '<div class="extra-info">ℹ️ Los kioscos suelen vender tabaco y vapers</div>';
-        } else if (p.tags?.shop === "supermarket") {
-            color = "#003366"; // Azul Marino
-        } else if (p.tags?.amenity === "fuel") {
-            color = "#C8A2C8"; // Lila
-        } else if (p.tags?.shop === "vape" || p.tags?.shop === "e-cigarette") {
-            color = "#5856d6";
-        } else if (p.tags?.shop === "convenience") {
-            color = "#00CED1"; // Cian
-        }
-
-        // OPACIDAD Y ANILLO
-        let fillOpacity = 1.0;
-        let outerRing = "";
-
-        if (status.known && status.isOpen) {
-            fillOpacity = 1.0;
-            outerRing = `<circle cx="20" cy="20" r="14" fill="none" stroke="#00FF00" stroke-width="3.5" opacity="1"/>`;
-        } else {
-            if (greyOut) {
-                fillOpacity = 0.75;
-            } else {
-                fillOpacity = 1.0;
-            }
-            outerRing = "";
-        }
-
-        let nombre = p.name || defaultName;
-        
-        let queryParts = [nombre];
-        if (p.address) {
-            queryParts = [p.address];
-        } else {
-            if (p.tags?.["addr:street"]) queryParts.push(p.tags["addr:street"]);
-            if (p.tags?.["addr:housenumber"]) queryParts.push(p.tags["addr:housenumber"]);
-            if (p.tags?.["addr:city"]) queryParts.push(p.tags["addr:city"]);
-        }
-        const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(queryParts.join(" "))}`;
-
-        let horarioEsp;
-        if (status.is247) {
-            horarioEsp = "Abierto 24h todos los días";
-        } else if (p.weekdayHours) {
-            horarioEsp = parseGoogleHours(p.weekdayHours);
-        } else {
-            horarioEsp = traducirHorario(horarioRaw);
-        }
-
-        const vende = vendeVapers(p.tags) || p.source === 'google';
-        const vapeText = vende ? '<div class="vape-info">✓ Probablemente vende vapers</div>' : '';
-
-        if (p.tags?.shop === "supermarket" && !status.known && !extraInfo) {
-            let note = 'Horario habitual aprox. 9:00-21:30 (verifica en Google Maps)';
-            const nameLower = nombre.toLowerCase();
-            if (nameLower.includes('día') || nameLower.includes('dia')) note = 'Día: la mayoría abre 9:00-21:30';
-            if (nameLower.includes('maskom')) note = 'Maskom: horarios variables';
-            extraInfo = `<div class="extra-info">ℹ️ ${note}</div>`;
-        } else if (!status.known && !status.is247 && !extraInfo && !p.weekdayHours) {
-            extraInfo = '<div class="extra-info">ℹ️ Horario no disponible – verifica en Google Maps</div>';
-        }
-
-        const pinIcon = L.divIcon({
-            className: "custom-pin-icon",
-            html: `<svg width="40" height="52" viewBox="0 0 40 52" xmlns="http://www.w3.org/2000/svg">
-                ${o
+/* ---------- OPENSTREETMAP ---------- */
+async function buscarOpenStreetMap(lat, lng, radio) {
+    try {
+        // Query OPTIMIZADA para estancos y quioscos prioritariamente
+        const query = `[out:json][timeout:25];
+(
+  node["shop"="tobacco"](around:${radio},${lat},${lng});
+  way["shop"="tobacco"](around:${radio},${lat},${lng});
+  node["amenity"="kiosk"](around:${radio},${lat},${lng});
+  way["amenity"="kiosk"](around:${radio},${lat},${lng});
+  node["shop"="kiosk"](around:${radio},${lat},${lng});
+  way["shop"="kiosk"](around:${radio},${lat},${lng});
+  node["shop"="newsagent"](around:${radio},${lat},${lng});
+  way["shop"="newsagent"](around:${radio},${lat},${lng});
+  node["shop"="vape"](around:${radio},${lat},${lng});
+  way["shop"="vape"](around:${radio},${lat},${lng});
+  node["shop"="e-cigarette"](around:${radio},${lat},${lng});
+  way["shop"="e-cigarette"](around:${radio},${lat},${lng});
+  node["shop"="convenience"](around:${radio},${lat},${lng});
+  way["shop"=
