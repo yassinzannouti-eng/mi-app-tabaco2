@@ -93,10 +93,7 @@ function getDefaultName(tags) {
     if (tags.amenity === "fuel") return "Gasolinera";
     if (tags.shop === "convenience") return "Tienda de conveniencia";
     if (tags.shop === "vape" || tags.shop === "e-cigarette") return "Tienda de vapers";
-    if (tags.amenity === "bar") return "Bar";
-    if (tags.amenity === "pub") return "Pub";
-    if (tags.amenity === "restaurant") return "Restaurante";
-    if (tags.amenity === "cafe") return "Cafetería";
+    if (tags.amenity === "kiosk" || tags.shop === "kiosk") return "Kiosco";
     return "Local";
 }
 
@@ -132,6 +129,8 @@ function vendeVapers(tags) {
            shop === 'tobacco' ||
            shop === 'supermarket' ||
            shop === 'convenience' ||
+           shop === 'kiosk' ||
+           amenity === 'kiosk' ||
            amenity === 'fuel';
 }
 
@@ -227,8 +226,8 @@ async function buscarDatos(showOverlay = false) {
               node["shop"="e-cigarette"](around:${radio},${c.lat},${c.lng});
               node["amenity"="fuel"](around:${radio},${c.lat},${c.lng});
               node["shop"="supermarket"](around:${radio},${c.lat},${c.lng});
-              node["amenity"="bar"](around:${radio},${c.lat},${c.lng});
-              node["amenity"="pub"](around:${radio},${c.lat},${c.lng});
+              node["amenity"="kiosk"](around:${radio},${c.lat},${c.lng});
+              node["shop"="kiosk"](around:${radio},${c.lat},${c.lng});
             );
             out;`)
         });
@@ -270,17 +269,42 @@ function render() {
         let defaultName = getDefaultName(p.tags);
         let extraInfo = "";
 
-        if (p.tags?.shop === "tobacco") color = "#ff3b30";
-        else if (p.tags?.shop === "supermarket") color = "#34c759";
-        else if (p.tags?.amenity === "fuel") color = "#9f47ff";
-        else if (p.tags?.shop === "vape" || p.tags?.shop === "e-cigarette") color = "#5856d6";
-        else if (p.tags?.shop === "convenience") color = "#ff9500";
-        else if (p.tags?.amenity === "bar" || p.tags?.amenity === "pub") {
-            color = "#FF6B6B"; // rojo suave para bares/pubs
-            extraInfo = '<div class="extra-info">ℹ️ Puede tener máquina de tabaco y/o vapers (muy común en bares con retransmisiones de fútbol o juegos recreativos) – verifica en el local o Google Maps</div>';
+        // NUEVOS COLORES
+        if (p.tags?.shop === "tobacco") {
+            color = "#8B4789"; // Púrpura/Berenjena
+        } else if (p.tags?.amenity === "kiosk" || p.tags?.shop === "kiosk") {
+            color = "#8B4789"; // Púrpura/Berenjena (igual que estancos)
+            extraInfo = '<div class="extra-info">ℹ️ Los kioscos suelen vender tabaco y vapers</div>';
+        } else if (p.tags?.shop === "supermarket") {
+            color = "#003366"; // Azul Marino
+        } else if (p.tags?.amenity === "fuel") {
+            color = "#C8A2C8"; // Lila
+        } else if (p.tags?.shop === "vape" || p.tags?.shop === "e-cigarette") {
+            color = "#5856d6"; // Mantener morado para tiendas de vapers
+        } else if (p.tags?.shop === "convenience") {
+            color = "#00CED1"; // Cian/Turquesa
         }
 
-        const opacity = (greyOut && !(status.known && status.isOpen)) ? 0.65 : 1.0;
+        // SISTEMA DE OPACIDAD Y ANILLO
+        let opacity = 1.0;
+        let strokeColor = "none";
+        let strokeWidth = 0;
+
+        if (status.known && status.isOpen) {
+            // Abierto confirmado: opacidad total + anillo verde neón
+            opacity = 1.0;
+            strokeColor = "#00FF7F"; // Verde neón
+            strokeWidth = 2.5;
+        } else {
+            // Cerrado o desconocido
+            if (greyOut) {
+                opacity = 0.4; // Translúcido
+            } else {
+                opacity = 1.0;
+            }
+            strokeColor = "none";
+            strokeWidth = 0;
+        }
 
         let nombre = p.tags?.name || defaultName;
 
@@ -294,7 +318,7 @@ function render() {
         const vende = vendeVapers(p.tags);
         const vapeText = vende ? '<div class="vape-info">✓ Probablemente vende vapers</div>' : '';
 
-        if (p.tags?.shop === "supermarket" && !status.known) {
+        if (p.tags?.shop === "supermarket" && !status.known && !extraInfo) {
             let note = 'Horario habitual aprox. 9:00-21:30 (verifica en Google Maps)';
             const nameLower = nombre.toLowerCase();
             if (nameLower.includes('día') || nameLower.includes('dia')) note = 'Día: la mayoría abre 9:00-21:30 (verifica en Google Maps)';
@@ -307,7 +331,11 @@ function render() {
         const pinIcon = L.divIcon({
             className: "custom-pin",
             html: `<svg width="32" height="44" viewBox="0 0 32 44" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M16 0C7.164 0 0 7.164 0 16c0 11.046 16 28 16 28s16-16.954 16-28c0-8.836-7.164-16-16-16z" fill="${color}" opacity="${opacity}"/>
+                <path d="M16 0C7.164 0 0 7.164 0 16c0 11.046 16 28 16 28s16-16.954 16-28c0-8.836-7.164-16-16-16z" 
+                      fill="${color}" 
+                      opacity="${opacity}" 
+                      stroke="${strokeColor}" 
+                      stroke-width="${strokeWidth}"/>
                 <circle cx="16" cy="16" r="7" fill="white" opacity="0.95"/>
             </svg>`,
             iconSize: [32, 44],
