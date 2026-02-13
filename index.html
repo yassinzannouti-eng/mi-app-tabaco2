@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Vaper Tracker Pro</title>
+<title>Vaper Tracker Pro - Completo</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
@@ -17,7 +17,7 @@ html, body { height: 100%; margin: 0; font-family: -apple-system, BlinkMacSystem
 #overlay button { padding:12px 24px; border:none; background:#007aff; color:white; border-radius:12px; cursor:pointer; font-weight:600; }
 
 #menuButton { position:fixed; top:15px; left:15px; z-index:2000; background:rgba(255,255,255,0.9); border:none; padding:12px; border-radius:14px; box-shadow:0 4px 15px rgba(0,0,0,0.1); cursor:pointer; backdrop-filter:blur(5px); }
-#panel { position:fixed; top:0; left:-280px; width:260px; height:100%; background:white; z-index:2100; padding:25px; box-shadow:4px 0 20px rgba(0,0,0,0.1); transition:.3s cubic-bezier(0.4,0,0.2,1); overflow:auto; }
+#panel { position:fixed; top:0; left:-320px; width:300px; height:100%; background:white; z-index:2100; padding:25px; box-shadow:4px 0 20px rgba(0,0,0,0.1); transition:.3s cubic-bezier(0.4,0,0.2,1); overflow:auto; }
 #panel.active { left:0; }
 
 .search-bar { position:absolute; top:15px; left:50%; transform:translateX(-50%); z-index:1500; display:flex; background:rgba(255,255,255,0.95); border-radius:18px; box-shadow:0 8px 24px rgba(0,0,0,0.12); overflow:hidden; width:85%; max-width:420px; backdrop-filter:blur(10px); border:1px solid rgba(0,0,0,0.05); }
@@ -27,12 +27,17 @@ html, body { height: 100%; margin: 0; font-family: -apple-system, BlinkMacSystem
 .btn-pin { position:absolute; bottom:100px; right:20px; width:55px; height:55px; background:white; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:28px; color:#c00; border:none; cursor:pointer; z-index:1500; box-shadow:0 6px 16px rgba(0,0,0,0.15); }
 .btn-search-area { position:absolute; bottom:30px; right:20px; background:#007aff; color:white; border:none; padding:14px 22px; border-radius:25px; cursor:pointer; z-index:1500; font-weight:700; box-shadow:0 6px 20px rgba(0,122,255,0.3); }
 
-/* Popups */
 .popup-container { text-align:center; min-width:240px; padding:8px; }
 .btn-maps { display:block; background:#007aff; color:white !important; text-align:center; padding:12px; border-radius:12px; text-decoration:none !important; margin-top:12px; font-weight:600; font-size:14px; }
 .horario-info { font-size:12px; color:#636366; display:block; margin-top:8px; line-height:1.4; border-top:1px solid #f2f2f7; padding-top:8px; }
 .vape-info { font-size:13px; font-weight:600; margin-top:6px; color:#34c759; }
 .extra-info { font-size:12px; color:#007aff; margin-top:6px; line-height:1.3; }
+.source-badge { display:inline-block; padding:3px 8px; border-radius:8px; font-size:10px; font-weight:600; margin-top:6px; background:#f2f2f7; color:#636366; }
+
+.api-key-section { background:#f9f9f9; padding:15px; border-radius:12px; margin-top:15px; }
+.api-key-section input { width:100%; padding:10px; border:1px solid #ddd; border-radius:8px; margin-top:8px; font-size:14px; }
+.api-key-section small { color:#666; font-size:11px; line-height:1.4; display:block; margin-top:8px; }
+.api-key-section a { color:#007aff; text-decoration:none; }
 </style>
 </head>
 
@@ -46,9 +51,22 @@ html, body { height: 100%; margin: 0; font-family: -apple-system, BlinkMacSystem
 <button id="menuButton">☰</button>
 
 <div id="panel">
-  <h3 style="font-weight:700">Ajustes</h3>
-  <label style="cursor:pointer"><input type="checkbox" id="onlyOpen"> Solo abiertos ahora</label><br><br>
-  <label style="cursor:pointer"><input type="checkbox" id="greyClosed" checked> Atenuar cerrados / desconocidos</label>
+  <h3 style="font-weight:700; margin-bottom:20px">Ajustes</h3>
+  
+  <label style="cursor:pointer; display:block; margin-bottom:12px">
+    <input type="checkbox" id="onlyOpen"> Solo abiertos ahora
+  </label>
+  
+  <label style="cursor:pointer; display:block; margin-bottom:20px">
+    <input type="checkbox" id="greyClosed" checked> Atenuar cerrados / desconocidos
+  </label>
+  
+  <div style="background:#f9f9f9; padding:15px; border-radius:12px; margin-top:15px;">
+    <strong style="font-size:13px">ℹ️ Cobertura mejorada</strong>
+    <small style="color:#666; font-size:11px; line-height:1.6; display:block; margin-top:8px;">
+      Esta versión busca estancos y kioscos usando OpenStreetMap con búsquedas avanzadas por nombre y categoría para máxima cobertura.
+    </small>
+  </div>
 </div>
 
 <div class="search-bar">
@@ -74,21 +92,22 @@ const retryBtn = document.getElementById("retryBtn");
 const onlyOpen = document.getElementById("onlyOpen");
 const greyClosed = document.getElementById("greyClosed");
 
-let map, userLocation, markersLayer, userMarker, elementsData = [];
+let map, userLocation, markersLayer, userMarker, allPlaces = [];
 let lastCenter = null;
 let lastZoom = null;
 let lastSearchTime = 0;
 let cachedData = null;
 let cachedCenter = null;
 let cachedRadius = 0;
-let isRendering = false; // Prevenir renders múltiples
+let isRendering = false;
 
 // Cargar estado
 onlyOpen.checked = localStorage.getItem('onlyOpen') === 'true';
 greyClosed.checked = localStorage.getItem('greyClosed') !== 'false';
 
-/* ---------- NOMBRE POR DEFECTO ---------- */
-function getDefaultName(tags) {
+/* ---------- UTILIDADES ---------- */
+function getDefaultName(tags, type) {
+    if (type === 'google') return tags.name || "Local";
     if (tags.shop === "tobacco") return "Estanco";
     if (tags.shop === "supermarket") return "Supermercado";
     if (tags.amenity === "fuel") return "Gasolinera";
@@ -98,7 +117,6 @@ function getDefaultName(tags) {
     return "Local";
 }
 
-/* ---------- TRADUCTOR DE HORARIOS ---------- */
 function traducirHorario(txt) {
     if (!txt) return "Horario desconocido";
     return txt
@@ -108,8 +126,39 @@ function traducirHorario(txt) {
         .replace(/off/g, "Cerrado").replace(/;/g, "<br>");
 }
 
-/* ---------- ESTADO DE HORARIO ---------- */
-function getOpeningStatus(opening_hours_str) {
+function parseGoogleHours(weekdayHours) {
+    if (!weekdayHours || weekdayHours.length === 0) return "Horario desconocido";
+    if (weekdayHours[0].includes("Open 24 hours")) return "Abierto 24h";
+    
+    const days = {
+        'Monday': 'Lun', 'Tuesday': 'Mar', 'Wednesday': 'Mié',
+        'Thursday': 'Jue', 'Friday': 'Vie', 'Saturday': 'Sáb', 'Sunday': 'Dom'
+    };
+    
+    return weekdayHours.map(h => {
+        let result = h;
+        Object.keys(days).forEach(en => {
+            result = result.replace(en, days[en]);
+        });
+        return result.replace(/:/g, '');
+    }).join('<br>');
+}
+
+function getOpeningStatus(opening_hours_str, tags, weekdayHours) {
+    // Las gasolineras siempre están abiertas 24/7
+    if (tags?.amenity === "fuel") {
+        return { isOpen: true, known: true, is247: true };
+    }
+    
+    // Si tenemos horario de Google
+    if (weekdayHours && weekdayHours.length > 0) {
+        if (weekdayHours[0].includes("Open 24 hours")) {
+            return { isOpen: true, known: true, is247: true };
+        }
+        // Para simplificar, marcamos como abiertos si tienen horario
+        return { isOpen: true, known: true };
+    }
+    
     if (!opening_hours_str || opening_hours_str.trim() === '') {
         return { isOpen: true, known: false };
     }
@@ -121,7 +170,6 @@ function getOpeningStatus(opening_hours_str) {
     }
 }
 
-/* ---------- ¿Vende vapers? ---------- */
 function vendeVapers(tags) {
     if (!tags) return false;
     const shop = tags.shop;
@@ -135,6 +183,37 @@ function vendeVapers(tags) {
            amenity === 'fuel';
 }
 
+function distanceBetween(lat1, lon1, lat2, lon2) {
+    const R = 6371e3; // Radio de la Tierra en metros
+    const φ1 = lat1 * Math.PI/180;
+    const φ2 = lat2 * Math.PI/180;
+    const Δφ = (lat2-lat1) * Math.PI/180;
+    const Δλ = (lon2-lon1) * Math.PI/180;
+    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ/2) * Math.sin(Δλ/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+}
+
+function removeDuplicates(places) {
+    const unique = [];
+    const threshold = 50; // 50 metros de distancia para considerar duplicado
+    
+    places.forEach(place => {
+        const isDuplicate = unique.some(existing => {
+            return distanceBetween(place.lat, place.lon, existing.lat, existing.lon) < threshold;
+        });
+        
+        if (!isDuplicate) {
+            unique.push(place);
+        }
+    });
+    
+    return unique;
+}
+
+/* ---------- GEOLOCALIZACIÓN ---------- */
 function iniciarGeolocalizacion() {
     navigator.geolocation.getCurrentPosition(
         pos => { iniciarMapa(pos.coords.latitude, pos.coords.longitude); },
@@ -148,6 +227,7 @@ function iniciarGeolocalizacion() {
 
 retryBtn.onclick = () => iniciarGeolocalizacion();
 
+/* ---------- INICIAR MAPA ---------- */
 function iniciarMapa(lat, lon) {
     userLocation = { lat, lon };
     overlay.style.display = "none";
@@ -179,7 +259,7 @@ function iniciarMapa(lat, lon) {
         const currentZoom = map.getZoom();
 
         if (cachedData && cachedCenter && currentCenter.distanceTo(cachedCenter) < cachedRadius * 0.7) {
-            return; // No renderizar si estamos en área cacheada
+            return;
         }
 
         const movedFar = !lastCenter || currentCenter.distanceTo(lastCenter) > 500 || Math.abs(currentZoom - lastZoom) >= 1;
@@ -203,6 +283,7 @@ function getVisibleRadius() {
     return map.getCenter().distanceTo(bounds.getNorthEast()) * 1.2;
 }
 
+/* ---------- BUSCAR DATOS ---------- */
 async function buscarDatos(showOverlay = false) {
     if (!map) return;
 
@@ -215,28 +296,13 @@ async function buscarDatos(showOverlay = false) {
     }
 
     try {
-        const resp = await fetch("https://overpass-api.de/api/interpreter", {
-            method: "POST",
-            body: "data=" + encodeURIComponent(`[out:json][timeout:25];
-            (
-              node["shop"="tobacco"](around:${radio},${c.lat},${c.lng});
-              node["shop"="convenience"](around:${radio},${c.lat},${c.lng});
-              node["shop"="vape"](around:${radio},${c.lat},${c.lng});
-              node["shop"="e-cigarette"](around:${radio},${c.lat},${c.lng});
-              node["amenity"="fuel"](around:${radio},${c.lat},${c.lng});
-              node["shop"="supermarket"](around:${radio},${c.lat},${c.lng});
-              node["amenity"="kiosk"](around:${radio},${c.lat},${c.lng});
-              node["shop"="kiosk"](around:${radio},${c.lat},${c.lng});
-            );
-            out;`)
-        });
-
-        if (!resp.ok) throw new Error("Overpass error");
-
-        const data = await resp.json();
-        elementsData = data.elements || [];
-
-        cachedData = elementsData;
+        // Buscar en OpenStreetMap con búsquedas completas
+        const osmPlaces = await buscarOpenStreetMap(c.lat, c.lng, radio);
+        
+        // Eliminar duplicados
+        allPlaces = removeDuplicates(osmPlaces);
+        
+        cachedData = allPlaces;
         cachedCenter = c;
         cachedRadius = radio;
 
@@ -252,8 +318,74 @@ async function buscarDatos(showOverlay = false) {
     }
 }
 
+async function buscarOpenStreetMap(lat, lng, radio) {
+    try {
+        const resp = await fetch("https://overpass-api.de/api/interpreter", {
+            method: "POST",
+            body: "data=" + encodeURIComponent(`[out:json][timeout:30];
+            (
+              node["shop"="tobacco"](around:${radio},${lat},${lng});
+              way["shop"="tobacco"](around:${radio},${lat},${lng});
+              node["shop"="convenience"](around:${radio},${lat},${lng});
+              way["shop"="convenience"](around:${radio},${lat},${lng});
+              node["shop"="vape"](around:${radio},${lat},${lng});
+              way["shop"="vape"](around:${radio},${lat},${lng});
+              node["shop"="e-cigarette"](around:${radio},${lat},${lng});
+              way["shop"="e-cigarette"](around:${radio},${lat},${lng});
+              node["amenity"="fuel"](around:${radio},${lat},${lng});
+              way["amenity"="fuel"](around:${radio},${lat},${lng});
+              node["shop"="supermarket"](around:${radio},${lat},${lng});
+              way["shop"="supermarket"](around:${radio},${lat},${lng});
+              node["amenity"="kiosk"](around:${radio},${lat},${lng});
+              way["amenity"="kiosk"](around:${radio},${lat},${lng});
+              node["shop"="kiosk"](around:${radio},${lat},${lng});
+              way["shop"="kiosk"](around:${radio},${lat},${lng});
+              node["shop"="newsagent"](around:${radio},${lat},${lng});
+              way["shop"="newsagent"](around:${radio},${lat},${lng});
+              node["name"~"[Ee]stanco",i](around:${radio},${lat},${lng});
+              way["name"~"[Ee]stanco",i](around:${radio},${lat},${lng});
+              node["name"~"[Kk]iosk",i](around:${radio},${lat},${lng});
+              way["name"~"[Kk]iosk",i](around:${radio},${lat},${lng});
+              node["name"~"[Qq]uiosco",i](around:${radio},${lat},${lng});
+              way["name"~"[Qq]uiosco",i](around:${radio},${lat},${lng});
+              node["name"~"[Ee]xpended",i](around:${radio},${lat},${lng});
+              way["name"~"[Ee]xpended",i](around:${radio},${lat},${lng});
+              node["name"~"[Tt]abaco",i](around:${radio},${lat},${lng});
+              way["name"~"[Tt]abaco",i](around:${radio},${lat},${lng});
+              node["name"~"prensa",i](around:${radio},${lat},${lng});
+              way["name"~"prensa",i](around:${radio},${lat},${lng});
+            );
+            out center;`)
+        });
+
+        if (!resp.ok) throw new Error("Overpass error");
+        const data = await resp.json();
+        
+        return (data.elements || []).map(p => {
+            // Para ways, usar el centro
+            const lat = p.lat || p.center?.lat;
+            const lon = p.lon || p.center?.lon;
+            
+            if (!lat || !lon) return null;
+            
+            return {
+                lat: lat,
+                lon: lon,
+                tags: p.tags,
+                source: 'osm',
+                name: p.tags?.name,
+                weekdayHours: null
+            };
+        }).filter(p => p !== null);
+    } catch (e) {
+        console.error("Error OpenStreetMap:", e);
+        return [];
+    }
+}
+
+/* ---------- RENDERIZAR ---------- */
 function render() {
-    if (isRendering) return; // Prevenir renders simultáneos
+    if (isRendering) return;
     isRendering = true;
 
     markersLayer.clearLayers();
@@ -261,142 +393,84 @@ function render() {
     const showOnlyOpen = onlyOpen.checked;
     const greyOut = greyClosed.checked;
 
-    elementsData.forEach(p => {
+    allPlaces.forEach(p => {
         const horarioRaw = p.tags?.opening_hours || "";
-        const status = getOpeningStatus(horarioRaw);
+        const status = getOpeningStatus(horarioRaw, p.tags, p.weekdayHours);
 
         if (showOnlyOpen && status.known && !status.isOpen) return;
 
         let color = "#8e8e93";
-        let defaultName = getDefaultName(p.tags);
+        let defaultName = getDefaultName(p.tags, p.source);
         let extraInfo = "";
 
-        // NUEVOS COLORES
-        if (p.tags?.shop === "tobacco") {
-            color = "#8B4789"; // Púrpura/Berenjena
-        } else if (p.tags?.amenity === "kiosk" || p.tags?.shop === "kiosk") {
-            color = "#8B4789"; // Púrpura/Berenjena (igual que estancos)
+        // COLORES
+        if (p.tags?.shop === "tobacco" || p.source === 'google' && p.name?.toLowerCase().includes('estanco')) {
+            color = "#8B4789"; // Púrpura
+        } else if (p.tags?.amenity === "kiosk" || p.tags?.shop === "kiosk" || 
+                   p.source === 'google' && (p.name?.toLowerCase().includes('kiosk') || p.name?.toLowerCase().includes('quiosco'))) {
+            color = "#8B4789"; // Púrpura
             extraInfo = '<div class="extra-info">ℹ️ Los kioscos suelen vender tabaco y vapers</div>';
         } else if (p.tags?.shop === "supermarket") {
             color = "#003366"; // Azul Marino
         } else if (p.tags?.amenity === "fuel") {
             color = "#C8A2C8"; // Lila
         } else if (p.tags?.shop === "vape" || p.tags?.shop === "e-cigarette") {
-            color = "#5856d6"; // Mantener morado para tiendas de vapers
+            color = "#5856d6";
         } else if (p.tags?.shop === "convenience") {
-            color = "#00CED1"; // Cian/Turquesa
+            color = "#00CED1"; // Cian
         }
 
-        // SISTEMA DE OPACIDAD Y ANILLO VERDE
+        // OPACIDAD Y ANILLO
         let fillOpacity = 1.0;
         let outerRing = "";
 
         if (status.known && status.isOpen) {
-            // Abierto confirmado: opacidad total + ANILLO VERDE NEÓN
             fillOpacity = 1.0;
-            outerRing = `<circle cx="20" cy="20" r="14" fill="none" stroke="#00FF00" stroke-width="3" opacity="1"/>`;
+            outerRing = `<circle cx="20" cy="20" r="14" fill="none" stroke="#00FF00" stroke-width="3.5" opacity="1"/>`;
         } else {
-            // Cerrado o desconocido
             if (greyOut) {
-                fillOpacity = 0.4; // Translúcido
+                fillOpacity = 0.75;
             } else {
                 fillOpacity = 1.0;
             }
             outerRing = "";
         }
 
-        let nombre = p.tags?.name || defaultName;
-
+        let nombre = p.name || defaultName;
+        
         let queryParts = [nombre];
-        if (p.tags["addr:street"]) queryParts.push(p.tags["addr:street"]);
-        if (p.tags["addr:housenumber"]) queryParts.push(p.tags["addr:housenumber"]);
-        if (p.tags["addr:city"]) queryParts.push(p.tags["addr:city"]);
+        if (p.address) {
+            queryParts = [p.address];
+        } else {
+            if (p.tags?.["addr:street"]) queryParts.push(p.tags["addr:street"]);
+            if (p.tags?.["addr:housenumber"]) queryParts.push(p.tags["addr:housenumber"]);
+            if (p.tags?.["addr:city"]) queryParts.push(p.tags["addr:city"]);
+        }
         const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(queryParts.join(" "))}`;
 
-        const horarioEsp = traducirHorario(horarioRaw);
-        const vende = vendeVapers(p.tags);
+        let horarioEsp;
+        if (status.is247) {
+            horarioEsp = "Abierto 24h todos los días";
+        } else if (p.weekdayHours) {
+            horarioEsp = parseGoogleHours(p.weekdayHours);
+        } else {
+            horarioEsp = traducirHorario(horarioRaw);
+        }
+
+        const vende = vendeVapers(p.tags) || p.source === 'google';
         const vapeText = vende ? '<div class="vape-info">✓ Probablemente vende vapers</div>' : '';
 
         if (p.tags?.shop === "supermarket" && !status.known && !extraInfo) {
             let note = 'Horario habitual aprox. 9:00-21:30 (verifica en Google Maps)';
             const nameLower = nombre.toLowerCase();
-            if (nameLower.includes('día') || nameLower.includes('dia')) note = 'Día: la mayoría abre 9:00-21:30 (verifica en Google Maps)';
-            if (nameLower.includes('maskom')) note = 'Maskom: horarios variables (verifica en Google Maps)';
+            if (nameLower.includes('día') || nameLower.includes('dia')) note = 'Día: la mayoría abre 9:00-21:30';
+            if (nameLower.includes('maskom')) note = 'Maskom: horarios variables';
             extraInfo = `<div class="extra-info">ℹ️ ${note}</div>`;
-        } else if (!status.known && !extraInfo) {
+        } else if (!status.known && !status.is247 && !extraInfo && !p.weekdayHours) {
             extraInfo = '<div class="extra-info">ℹ️ Horario no disponible – verifica en Google Maps</div>';
         }
 
-        // SVG con anillo verde VISIBLE alrededor
         const pinIcon = L.divIcon({
             className: "custom-pin-icon",
             html: `<svg width="40" height="52" viewBox="0 0 40 52" xmlns="http://www.w3.org/2000/svg">
-                ${outerRing}
-                <path d="M20 4C12.268 4 6 10.268 6 18c0 9.75 14 28 14 28s14-18.25 14-28c0-7.732-6.268-14-14-14z" 
-                      fill="${color}" 
-                      fill-opacity="${fillOpacity}"/>
-                <circle cx="20" cy="18" r="7" fill="white" opacity="0.95"/>
-            </svg>`,
-            iconSize: [40, 52],
-            iconAnchor: [20, 50],
-            popupAnchor: [0, -46]
-        });
-
-        const marker = L.marker([p.lat, p.lon], { 
-            icon: pinIcon,
-            riseOnHover: true
-        });
-
-        marker.bindPopup(`
-            <div class="popup-container">
-                <strong style="font-size:16px;">${nombre}</strong><br>
-                <span class="horario-info"><b>Horario:</b><br>${horarioEsp}</span>
-                ${vapeText}
-                ${extraInfo}
-                <a href="${mapsUrl}" target="_blank" class="btn-maps">VER EN MAPS</a>
-            </div>
-        `, {
-            autoPan: true,
-            keepInView: true,
-            closeButton: true
-        });
-
-        markersLayer.addLayer(marker);
-    });
-
-    isRendering = false;
-}
-
-// Eventos
-document.getElementById("menuButton").onclick = () => document.getElementById("panel").classList.toggle("active");
-document.getElementById("pinBtn").onclick = () => map.flyTo([userLocation.lat, userLocation.lon], 17);
-document.getElementById("searchAreaBtn").onclick = () => buscarDatos(false);
-document.getElementById("searchBtn").onclick = async () => {
-    const val = document.getElementById("address").value.trim();
-    if (!val) return;
-    try {
-        const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(val)}&limit=1`);
-        const d = await r.json();
-        if (d.length > 0) {
-            map.setView([d[0].lat, d[0].lon], 16);
-            buscarDatos(false);
-        }
-    } catch (e) { console.error(e); }
-};
-
-onlyOpen.addEventListener('change', () => { 
-    localStorage.setItem('onlyOpen', onlyOpen.checked); 
-    render(); 
-});
-
-greyClosed.addEventListener('change', () => { 
-    localStorage.setItem('greyClosed', greyClosed.checked); 
-    render(); 
-});
-
-iniciarGeolocalizacion();
-
-});
-</script>
-</body>
-</html>
+                ${o
