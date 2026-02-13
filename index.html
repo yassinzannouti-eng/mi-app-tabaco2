@@ -33,6 +33,10 @@ html, body { height: 100%; margin: 0; font-family: -apple-system, BlinkMacSystem
 .horario-info { font-size:12px; color:#636366; display:block; margin-top:8px; line-height:1.4; border-top:1px solid #f2f2f7; padding-top:8px; }
 .vape-info { font-size:13px; font-weight:600; margin-top:6px; color:#34c759; }
 .extra-info { font-size:12px; color:#007aff; margin-top:6px; line-height:1.3; }
+
+/* Fix para evitar parpadeo en los pines */
+.custom-pin { pointer-events: none; }
+.custom-pin svg { pointer-events: auto; }
 </style>
 </head>
 
@@ -286,24 +290,21 @@ function render() {
         }
 
         // SISTEMA DE OPACIDAD Y ANILLO
-        let opacity = 1.0;
-        let strokeColor = "none";
-        let strokeWidth = 0;
+        let fillOpacity = 1.0;
+        let ringHTML = "";
 
         if (status.known && status.isOpen) {
             // Abierto confirmado: opacidad total + anillo verde neón
-            opacity = 1.0;
-            strokeColor = "#00FF7F"; // Verde neón
-            strokeWidth = 2.5;
+            fillOpacity = 1.0;
+            ringHTML = `<circle cx="16" cy="16" r="10" fill="none" stroke="#00FF7F" stroke-width="2.5" opacity="0.9"/>`;
         } else {
             // Cerrado o desconocido
             if (greyOut) {
-                opacity = 0.4; // Translúcido
+                fillOpacity = 0.4; // Translúcido
             } else {
-                opacity = 1.0;
+                fillOpacity = 1.0;
             }
-            strokeColor = "none";
-            strokeWidth = 0;
+            ringHTML = "";
         }
 
         let nombre = p.tags?.name || defaultName;
@@ -330,18 +331,16 @@ function render() {
 
         const pinIcon = L.divIcon({
             className: "custom-pin",
-            html: `<svg width="32" height="44" viewBox="0 0 32 44" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M16 0C7.164 0 0 7.164 0 16c0 11.046 16 28 16 28s16-16.954 16-28c0-8.836-7.164-16-16-16z" 
+            html: `<svg width="36" height="48" viewBox="0 0 36 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                ${ringHTML}
+                <path d="M18 2C9.716 2 3 8.716 3 17c0 10.5 15 27 15 27s15-16.5 15-27c0-8.284-6.716-15-15-15z" 
                       fill="${color}" 
-                      opacity="${opacity}" 
-                      stroke="${strokeColor}" 
-                      stroke-width="${strokeWidth}"/>
-                <circle cx="16" cy="16" r="7" fill="white" opacity="0.95"/>
+                      fill-opacity="${fillOpacity}"/>
+                <circle cx="18" cy="17" r="7" fill="white" opacity="0.95"/>
             </svg>`,
-            iconSize: [32, 44],
-            iconAnchor: [16, 44],
-            popupAnchor: [0, -40],
-            className: ''
+            iconSize: [36, 48],
+            iconAnchor: [18, 46],
+            popupAnchor: [0, -42]
         });
 
         L.marker([p.lat, p.lon], { icon: pinIcon })
