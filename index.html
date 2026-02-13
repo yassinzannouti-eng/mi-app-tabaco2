@@ -6,35 +6,21 @@
 <title>Vaper Tracker Pro</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
 
 <style>
-html, body { height: 100%; margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f5f5f7; }
-#map { height: 100%; width: 100%; display: none; }
+html, body { height:100%; margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; background:#f5f5f7;}
+#map { height:100%; width:100%; display:none; }
 
-#overlay { position:fixed; top:0; left:0; width:100%; height:100%; background:white; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:5000; font-size:18px; text-align:center; padding:20px; gap:20px; }
-#overlay button { padding:12px 24px; border:none; background:#007aff; color:white; border-radius:12px; cursor:pointer; font-weight:600; }
+#overlay { position:fixed; top:0; left:0; width:100%; height:100%; background:white; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:5000; font-size:18px; gap:20px;}
+#overlay button { padding:12px 24px; border:none; background:#007aff; color:white; border-radius:12px; cursor:pointer; font-weight:600;}
 
-#menuButton { position:fixed; top:15px; left:15px; z-index:2000; background:rgba(255,255,255,0.9); border:none; padding:12px; border-radius:14px; box-shadow:0 4px 15px rgba(0,0,0,0.1); cursor:pointer; backdrop-filter:blur(5px); }
-#panel { position:fixed; top:0; left:-280px; width:260px; height:100%; background:white; z-index:2100; padding:25px; box-shadow:4px 0 20px rgba(0,0,0,0.1); transition:.3s cubic-bezier(0.4,0,0.2,1); overflow:auto; }
-#panel.active { left:0; }
+.custom-pin { pointer-events:none; }
+.custom-pin svg { pointer-events:auto; }
 
-.search-bar { position:absolute; top:15px; left:50%; transform:translateX(-50%); z-index:1500; display:flex; background:rgba(255,255,255,0.95); border-radius:18px; box-shadow:0 8px 24px rgba(0,0,0,0.12); overflow:hidden; width:85%; max-width:420px; backdrop-filter:blur(10px); border:1px solid rgba(0,0,0,0.05); }
-.search-bar input { flex:1; padding:14px; border:none; outline:none; font-size:16px; background:transparent; }
-.search-bar button { padding:14px 20px; border:none; background:#007aff; color:white; cursor:pointer; }
-
-.btn-pin { position:absolute; bottom:100px; right:20px; width:55px; height:55px; background:white; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:28px; color:#c00; border:none; cursor:pointer; z-index:1500; box-shadow:0 6px 16px rgba(0,0,0,0.15); }
-.btn-search-area { position:absolute; bottom:30px; right:20px; background:#007aff; color:white; border:none; padding:14px 22px; border-radius:25px; cursor:pointer; z-index:1500; font-weight:700; box-shadow:0 6px 20px rgba(0,122,255,0.3); }
-
-.popup-container { text-align:center; min-width:240px; padding:8px; }
-.btn-maps { display:block; background:#007aff; color:white !important; text-align:center; padding:12px; border-radius:12px; text-decoration:none !important; margin-top:12px; font-weight:600; font-size:14px; }
-.horario-info { font-size:12px; color:#636366; display:block; margin-top:8px; line-height:1.4; border-top:1px solid #f2f2f7; padding-top:8px; }
-.vape-info { font-size:13px; font-weight:600; margin-top:6px; color:#34c759; }
-.extra-info { font-size:12px; color:#007aff; margin-top:6px; line-height:1.3; }
-
-.custom-pin { pointer-events: none; }
-.custom-pin svg { pointer-events: auto; }
+.horario-info { font-size:12px; color:#636366; display:block; margin-top:8px; line-height:1.4; border-top:1px solid #f2f2f7; padding-top:8px;}
+.btn-maps { display:block; background:#007aff; color:white!important; text-align:center; padding:12px; border-radius:12px; text-decoration:none!important; margin-top:12px; font-weight:600; font-size:14px;}
 </style>
 </head>
 
@@ -44,22 +30,6 @@ html, body { height: 100%; margin: 0; font-family: -apple-system, BlinkMacSystem
   <div id="overlayText">Localizando puntos de venta...</div>
   <button id="retryBtn" style="display:none;">Reintentar acceso</button>
 </div>
-
-<button id="menuButton">☰</button>
-
-<div id="panel">
-  <h3 style="font-weight:700">Ajustes</h3>
-  <label><input type="checkbox" id="onlyOpen"> Solo abiertos ahora</label><br><br>
-  <label><input type="checkbox" id="greyClosed" checked> Atenuar cerrados</label>
-</div>
-
-<div class="search-bar">
-  <input type="text" id="address" placeholder="Ciudad, calle o código postal">
-  <button id="searchBtn">🔍</button>
-</div>
-
-<button class="btn-pin" id="pinBtn">📌</button>
-<button class="btn-search-area" id="searchAreaBtn">BUSCAR EN ESTA ÁREA</button>
 
 <div id="map"></div>
 
@@ -73,139 +43,146 @@ document.addEventListener("DOMContentLoaded", () => {
 const overlay = document.getElementById("overlay");
 const overlayText = document.getElementById("overlayText");
 const retryBtn = document.getElementById("retryBtn");
-const onlyOpen = document.getElementById("onlyOpen");
-const greyClosed = document.getElementById("greyClosed");
 
-let map, userLocation, markersLayer, elementsData = [];
+let map, markersLayer, elementsData=[];
 
-function getOpeningStatus(str) {
-    if (!str || str.trim() === '') return { isOpen: true, known: false };
-    try {
-        const oh = new opening_hours(str);
-        return { isOpen: oh.isOpen(new Date()), known: true };
-    } catch {
-        return { isOpen: true, known: false };
+function getOpeningStatus(str){
+    if(!str || str.trim()==='') return {isOpen:true, known:false};
+    try{
+        const oh=new opening_hours(str);
+        return {isOpen:oh.isOpen(new Date()), known:true};
+    }catch{
+        return {isOpen:true, known:false};
     }
 }
 
-function iniciarGeolocalizacion() {
+function iniciarGeolocalizacion(){
     navigator.geolocation.getCurrentPosition(
-        pos => iniciarMapa(pos.coords.latitude, pos.coords.longitude),
-        () => {
-            overlayText.innerHTML = "GPS desactivado o denegado.";
-            retryBtn.style.display = "block";
+        pos=>iniciarMapa(pos.coords.latitude,pos.coords.longitude),
+        ()=>{
+            overlayText.innerHTML="GPS desactivado o denegado.";
+            retryBtn.style.display="block";
         },
-        { enableHighAccuracy: true, timeout: 12000 }
+        {enableHighAccuracy:true, timeout:12000}
     );
 }
 
-retryBtn.onclick = iniciarGeolocalizacion;
+retryBtn.onclick=iniciarGeolocalizacion;
 
-function iniciarMapa(lat, lon) {
-    overlay.style.display = "none";
-    document.getElementById("map").style.display = "block";
+function iniciarMapa(lat,lon){
 
-    map = L.map('map').setView([lat, lon], 16);
+    overlay.style.display="none";
+    document.getElementById("map").style.display="block";
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        attribution: '© OpenStreetMap'
+    map=L.map('map').setView([lat,lon],16);
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{
+        attribution:'© OpenStreetMap'
     }).addTo(map);
 
-    markersLayer = L.markerClusterGroup().addTo(map);
+    markersLayer=L.markerClusterGroup().addTo(map);
 
-    L.circleMarker([lat, lon], {
-        radius: 9, color: "white", fillColor: "#007aff", fillOpacity: 0.9, weight: 3
+    L.circleMarker([lat,lon],{
+        radius:9,color:"white",fillColor:"#007aff",fillOpacity:0.9,weight:3
     }).addTo(map);
 
     buscarDatos();
 }
 
-function getVisibleRadius() {
-    const bounds = map.getBounds();
+function getVisibleRadius(){
+    const bounds=map.getBounds();
     return map.getCenter().distanceTo(bounds.getNorthEast());
 }
 
-async function buscarDatos() {
-    const c = map.getCenter();
-    const radio = getVisibleRadius();
+async function buscarDatos(){
 
-    const resp = await fetch("https://overpass-api.de/api/interpreter", {
-        method: "POST",
-        body: "data=" + encodeURIComponent(`[out:json][timeout:25];
+    const c=map.getCenter();
+    const radio=getVisibleRadius();
+
+    const resp=await fetch("https://overpass-api.de/api/interpreter",{
+        method:"POST",
+        body:"data="+encodeURIComponent(`[out:json][timeout:25];
         (
           node["shop"="tobacco"](around:${radio},${c.lat},${c.lng});
+          node["shop"="kiosk"](around:${radio},${c.lat},${c.lng});
+          node["amenity"="kiosk"](around:${radio},${c.lat},${c.lng});
           node["shop"="convenience"](around:${radio},${c.lat},${c.lng});
+          node["shop"="supermarket"](around:${radio},${c.lat},${c.lng});
           node["shop"="vape"](around:${radio},${c.lat},${c.lng});
           node["shop"="e-cigarette"](around:${radio},${c.lat},${c.lng});
           node["amenity"="fuel"](around:${radio},${c.lat},${c.lng});
-          node["shop"="supermarket"](around:${radio},${c.lat},${c.lng});
-          node["amenity"="kiosk"](around:${radio},${c.lat},${c.lng});
-          node["shop"="kiosk"](around:${radio},${c.lat},${c.lng});
         );
         out;`)
     });
 
-    const data = await resp.json();
-    elementsData = data.elements || [];
+    const data=await resp.json();
+    elementsData=data.elements||[];
     render();
 }
 
-function render() {
+function render(){
+
     markersLayer.clearLayers();
 
-    elementsData.forEach(p => {
+    elementsData.forEach(p=>{
 
-        const horarioRaw = p.tags?.opening_hours || "";
-        const status = getOpeningStatus(horarioRaw);
-        const isFuel = p.tags?.amenity === "fuel";
+        const tags=p.tags||{};
+        const horarioRaw=tags.opening_hours||"";
+        const status=getOpeningStatus(horarioRaw);
 
-        let color = "#8e8e93";
-        if (p.tags?.shop === "tobacco") color = "#8B4789";
-        if (isFuel) color = "#C8A2C8";
+        let color="#8e8e93";
 
-        let ringHTML = "";
-        let fillOpacity = 1;
+        if(tags.shop==="tobacco") color="#8B4789";
+        else if(tags.shop==="kiosk"||tags.amenity==="kiosk") color="#8B4789";
+        else if(tags.shop==="supermarket") color="#003366";
+        else if(tags.amenity==="fuel") color="#C8A2C8";
+        else if(tags.shop==="vape"||tags.shop==="e-cigarette") color="#5856d6";
+        else if(tags.shop==="convenience") color="#00CED1";
 
-        if (isFuel || (status.known && status.isOpen)) {
-            ringHTML = `
+        const isFuel=tags.amenity==="fuel";
+
+        let ringHTML="";
+        let fillOpacity=1;
+
+        if(isFuel || (status.known && status.isOpen)){
+            ringHTML=`
             <circle cx="18" cy="18" r="13"
                 fill="none"
                 stroke="#00FF00"
                 stroke-width="4"
                 style="filter: drop-shadow(0 0 6px #00FF00) drop-shadow(0 0 10px #00FF00);"
             />`;
-        } else if (status.known && !status.isOpen && greyClosed.checked) {
-            fillOpacity = 0.35;
         }
 
-        const nombre = p.tags?.name || "Local";
+        const nombre=tags.name||"Local";
 
-        const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(nombre)}`;
+        const horarioMostrar=horarioRaw?horarioRaw.replace(/;/g,"<br>"):"Horario no disponible";
 
-        const horarioMostrar = horarioRaw ? horarioRaw.replace(/;/g, "<br>") : "Horario no disponible";
+        const mapsUrl=`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(nombre)}`;
 
-        const pinIcon = L.divIcon({
-            className: "custom-pin",
-            html: `<svg width="36" height="48" viewBox="0 0 36 48">
+        const pinIcon=L.divIcon({
+            className:"custom-pin",
+            html:`<svg width="36" height="48" viewBox="0 0 36 48">
                 ${ringHTML}
                 <path d="M18 2C9.7 2 3 8.7 3 17c0 10.5 15 27 15 27s15-16.5 15-27c0-8.3-6.7-15-15-15z"
                       fill="${color}" fill-opacity="${fillOpacity}"/>
                 <circle cx="18" cy="17" r="7" fill="white"/>
             </svg>`,
-            iconSize: [36, 48],
-            iconAnchor: [18, 46],
-            popupAnchor: [0, -42]
+            iconSize:[36,48],
+            iconAnchor:[18,46],
+            popupAnchor:[0,-42]
         });
 
-        L.marker([p.lat, p.lon], { icon: pinIcon })
-            .bindPopup(`
-                <div class="popup-container">
-                    <strong>${nombre}</strong>
-                    <span class="horario-info"><b>Horario:</b><br>${horarioMostrar}</span>
-                    <a href="${mapsUrl}" target="_blank" class="btn-maps">VER EN MAPS</a>
-                </div>
-            `)
-            .addTo(markersLayer);
+        L.marker([p.lat,p.lon],{icon:pinIcon})
+        .bindPopup(`
+            <div>
+                <strong>${nombre}</strong>
+                <span class="horario-info"><b>Horario:</b><br>${horarioMostrar}</span>
+                <a href="${mapsUrl}" target="_blank" class="btn-maps">VER EN MAPS</a>
+            </div>
+        `)
+        .addTo(markersLayer);
+
     });
 }
 
