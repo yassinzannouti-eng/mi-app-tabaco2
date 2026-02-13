@@ -189,4 +189,202 @@ function iniciarMapa(lat, lon) {
 
         if (movedFar) {
             clearTimeout(searchTimeout);
-            searchTimeout = set
+            searchTimeout = setTimeout(() => {
+                lastCenter = currentCenter;
+                lastZoom = currentZoom;
+                lastSearchTime = now;
+                buscarDatos(true);
+            }, 3000);
+        }
+    });
+
+    buscarDatos(false);
+}
+
+function getVisibleRadius() {
+    const bounds = map.getBounds();
+    return map.getCenter().distanceTo(bounds.getNorthEast()) * 1.2;
+}
+
+async function buscarDatos(showOverlay = false) {
+    if (!map) return;
+
+    const c = map.getCenter();
+    const radio = getVisibleRadius();
+
+    if (showOverlay) {
+        overlay.style.display = 'flex';
+        overlayText.textContent = 'Buscando locales cercanos...';
+    }
+
+    try {
+        const resp = await fetch("https://overpass-api.de/api/interpreter", {
+            method: "POST",
+            body: "data=" + encodeURIComponent(`[out:json][timeout:25];
+            (
+              node["shop"="tobacco"](around:${radio},${c.lat},${c.lng});
+              node["shop"="convenience"](around:${radio},${c.lat},${c.lng});
+              node["shop"="vape"](around:${radio},${c.lat},${c.lng});
+              node["shop"="e-cigarette"](around:${radio},${c.lat},${c.lng});
+              node["amenity"="fuel"](around:${radio},${c.lat},${c.lng});
+              node["shop"="supermarket"](around:${radio},${c.lat},${c.lng});
+              node["amenity"="kiosk"](around:${radio},${c.lat},${c.lng});
+              node["shop"="kiosk"](around:${radio},${c.lat},${c.lng});
+            );
+            out;`)
+        });
+
+        if (!resp.ok) throw new Error("Overpass error");
+
+        const data = await resp.json();
+        elementsData = data.elements || [];
+
+        cachedData = elementsData;
+        cachedCenter = c;
+        cachedRadius = radio;
+
+        render();
+    } catch (e) {
+        console.error("Error al buscar:", e);
+        if (showOverlay) {
+            overlayText.textContent = 'Error al cargar datos';
+            setTimeout(() => overlay.style.display = 'none', 2000);
+        }
+    } finally {
+        if (showOverlay) setTimeout(() => overlay.style.display = 'none', 800);
+    }
+}
+
+function render() {
+    markersLayer.clearLayers();
+
+    const showOnlyOpen = onlyOpen.checked;
+    const greyOut = greyClosed.checked;
+
+    elementsData.forEach(p => {
+        const horarioRaw = p.tags?.opening_hours || "";
+        const status = getOpeningStatus(horarioRaw);
+
+        if (showOnlyOpen && status.known && !status.isOpen) return;
+
+        let color = "#8e8e93";
+        let defaultName = getDefaultName(p.tags);
+        let extraInfo = "";
+
+        // NUEVOS COLORES
+        if (p.tags?.shop === "tobacco") {
+            color = "#8B4789"; // Púrpura/Berenjena
+        } else if (p.tags?.amenity === "kiosk" || p.tags?.shop === "kiosk") {
+            color = "#8B4789"; // Púrpura/Berenjena (igual que estancos)
+            extraInfo = '<div class="extra-info">ℹ️ Los kioscos suelen vender tabaco y vapers</div>';
+        } else if (p.tags?.shop === "supermarket") {
+            color = "#003366"; // Azul Marino
+        } else if (p.tags?.amenity === "fuel") {
+            color = "#C8A2C8"; // Lila
+        } else if (p.tags?.shop === "vape" || p.tags?.shop === "e-cigarette") {
+            color = "#5856d6"; // Mantener morado para tiendas de vapers
+        } else if (p.tags?.shop === "convenience") {
+            color = "#00CED1"; // Cian/Turquesa
+        }
+
+        // SISTEMA DE OPACIDAD Y ANILLO VERDE (AÑADIDO AQUÍ)
+        let fillOpacity = 1.0;
+        let ringHTML = "";
+
+        if (status.known && status.isOpen) {
+            // Abierto confirmado: anillo verde neón
+            ringHTML = `<circle cx="18" cy="18" r="12" fill="none" stroke="#00FF7F" stroke-width="3" opacity="1"/>`;
+            fillOpacity = 1.0;
+        } else {
+            // Cerrado o desconocido
+            if (greyOut) {
+                fillOpacity = 0.4; // Translúcido
+            } else {
+                fillOpacity = 1.0;
+            }
+            ringHTML = "";
+        }
+
+        let nombre = p.tags?.name || defaultName;
+
+        let queryParts = [nombre];
+        if (p.tags["addr:street"]) queryParts.push(p.tags["addr:street"]);
+        if (p.tags["addr:housenumber"]) queryParts.push(p.tags["addr:housenumber"]);
+        if (p.tags["addr:city"]) queryParts.push(p.tags["addr:city"]);
+        const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(queryParts.join(" "))}`;
+
+        const horarioEsp = traducirHorario(horarioRaw);
+        const vende = vendeVapers(p.tags);
+        const vapeText = vende ? '<div class="vape-info">✓ Probablemente vende vapers</div>' : '';
+
+        if (p.tags?.shop === "supermarket" && !status.known && !extraInfo) {
+            let note = 'Horario habitual aprox. 9:00-21:30 (verifica en Google Maps)';
+            const nameLower = nombre.toLowerCase();
+            if (nameLower.includes('día') || nameLower.includes('dia')) note = 'Día: la mayoría abre 9:00-21:30 (verifica en Google Maps)';
+            if (nameLower.includes('maskom')) note = 'Maskom: horarios variables (verifica en Google Maps)';
+            extraInfo = `<div class="extra-info">ℹ️ ${note}</div>`;
+        } else if (!status.known && !extraInfo) {
+            extraInfo = '<div class="extra-info">ℹ️ Horario no disponible – verifica en Google Maps</div>';
+        }
+
+        const pinIcon = L.divIcon({
+            className: "custom-pin",
+            html: `<svg width="36" height="48" viewBox="0 0 36 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                ${ringHTML}
+                <path d="M18 2C9.716 2 3 8.716 3 17c0 10.5 15 27 15 27s15-16.5 15-27c0-8.284-6.716-15-15-15z" 
+                      fill="${color}" 
+                      fill-opacity="${fillOpacity}"/>
+                <circle cx="18" cy="17" r="7" fill="white" opacity="0.95"/>
+            </svg>`,
+            iconSize: [36, 48],
+            iconAnchor: [18, 46],
+            popupAnchor: [0, -42]
+        });
+
+        L.marker([p.lat, p.lon], { icon: pinIcon })
+            .bindPopup(`
+                <div class="popup-container">
+                    <strong style="font-size:16px;">${nombre}</strong><br>
+                    <span class="horario-info"><b>Horario:</b><br>${horarioEsp}</span>
+                    ${vapeText}
+                    ${extraInfo}
+                    <a href="${mapsUrl}" target="_blank" class="btn-maps">VER EN MAPS</a>
+                </div>
+            `)
+            .addTo(markersLayer);
+    });
+}
+
+// Eventos
+document.getElementById("menuButton").onclick = () => document.getElementById("panel").classList.toggle("active");
+document.getElementById("pinBtn").onclick = () => map.flyTo([userLocation.lat, userLocation.lon], 17);
+document.getElementById("searchAreaBtn").onclick = () => buscarDatos(false);
+document.getElementById("searchBtn").onclick = async () => {
+    const val = document.getElementById("address").value.trim();
+    if (!val) return;
+    try {
+        const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(val)}&limit=1`);
+        const d = await r.json();
+        if (d.length > 0) {
+            map.setView([d[0].lat, d[0].lon], 16);
+            buscarDatos(false);
+        }
+    } catch (e) { console.error(e); }
+};
+
+onlyOpen.addEventListener('change', () => { 
+    localStorage.setItem('onlyOpen', onlyOpen.checked); 
+    render(); 
+});
+
+greyClosed.addEventListener('change', () => { 
+    localStorage.setItem('greyClosed', greyClosed.checked); 
+    render(); 
+});
+
+iniciarGeolocalizacion();
+
+});
+</script>
+</body>
+</html>
