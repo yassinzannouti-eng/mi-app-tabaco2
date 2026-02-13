@@ -267,4 +267,265 @@ async function buscarDireccion() {
             const lon = parseFloat(data[0].lon);
             
             if (map) {
-                map.setView([lat, lon], 16
+                map.setView([lat, lon], 16);
+                overlay.style.display = 'none';
+                buscarDatos(true);
+            } else {
+                iniciarMapa(lat, lon);
+            }
+        } else {
+            overlayText.textContent = 'No encontrado';
+            setTimeout(() => overlay.style.display = 'none', 2000);
+        }
+    } catch (e) {
+        console.error('Error:', e);
+        overlayText.textContent = 'Error al buscar';
+        setTimeout(() => overlay.style.display = 'none', 2000);
+    }
+}
+
+/* ---------- INICIAR MAPA ---------- */
+function iniciarMapa(lat, lon) {
+    userLocation = { lat, lon };
+    
+    document.getElementById("map").style.display = "block";
+
+    map = L.map('map', { zoomControl: false }).setView([lat, lon], 16);
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        attribution: '© OpenStreetMap'
+    }).addTo(map);
+
+    markersLayer = L.markerClusterGroup({
+        maxClusterRadius: 70,
+        spiderfyOnMaxZoom: true,
+        showCoverageOnHover: false,
+        zoomToBoundsOnClick: true
+    }).addTo(map);
+
+    userMarker = L.circleMarker([lat, lon], {
+        radius: 9, color: "white", fillColor: "#667eea", fillOpacity: 0.9, weight: 3
+    }).addTo(map);
+
+    let searchTimeout;
+    map.on('moveend zoomend', () => {
+        const now = Date.now();
+        if (now - lastSearchTime < 5000) return;
+
+        const currentCenter = map.getCenter();
+        const currentZoom = map.getZoom();
+
+        if (cachedData && cachedCenter && currentCenter.distanceTo(cachedCenter) < cachedRadius * 0.7) {
+            return;
+        }
+
+        const movedFar = !lastCenter || currentCenter.distanceTo(lastCenter) > 500 || Math.abs(currentZoom - lastZoom) >= 1;
+
+        if (movedFar) {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                lastCenter = currentCenter;
+                lastZoom = currentZoom;
+                lastSearchTime = now;
+                buscarDatos(false);
+            }, 2000);
+        }
+    });
+
+    buscarDatos(false);
+}
+
+function getVisibleRadius() {
+    const bounds = map.getBounds();
+    return Math.min(map.getCenter().distanceTo(bounds.getNorthEast()) * 1.2, 5000);
+}
+
+/* ---------- BUSCAR DATOS ---------- */
+async function buscarDatos(showOverlay = false) {
+    if (!map) return;
+
+    const c = map.getCenter();
+    const radio = getVisibleRadius();
+
+    if (showOverlay) {
+        overlay.style.display = 'flex';
+        overlayText.textContent = 'Buscando...';
+    }
+
+    try {
+        const osmPlaces = await buscarOpenStreetMap(c.lat, c.lng, radio);
+        allPlaces = removeDuplicates(osmPlaces);
+        
+        cachedData = allPlaces;
+        cachedCenter = c;
+        cachedRadius = radio;
+
+        render();
+    } catch (e) {
+        console.error("Error al buscar:", e);
+    } finally {
+        if (showOverlay) setTimeout(() => overlay.style.display = 'none', 800);
+    }
+}
+
+async function buscarOpenStreetMap(lat, lng, radio) {
+    try {
+        const query = `[out:json][timeout:25];
+(
+  node["shop"="tobacco"](around:${radio},${lat},${lng});
+  way["shop"="tobacco"](around:${radio},${lat},${lng});
+  node["amenity"="kiosk"](around:${radio},${lat},${lng});
+  way["amenity"="kiosk"](around:${radio},${lat},${lng});
+  node["shop"="kiosk"](around:${radio},${lat},${lng});
+  way["shop"="kiosk"](around:${radio},${lat},${lng});
+  node["shop"="newsagent"](around:${radio},${lat},${lng});
+  way["shop"="newsagent"](around:${radio},${lat},${lng});
+  node["shop"="vape"](around:${radio},${lat},${lng});
+  way["shop"="vape"](around:${radio},${lat},${lng});
+  node["shop"="e-cigarette"](around:${radio},${lat},${lng});
+  way["shop"="e-cigarette"](around:${radio},${lat},${lng});
+  node["shop"="convenience"](around:${radio},${lat},${lng});
+  way["shop"="convenience"](around:${radio},${lat},${lng});
+  node["shop"="supermarket"](around:${radio},${lat},${lng});
+  way["shop"="supermarket"](around:${radio},${lat},${lng});
+  node["amenity"="fuel"](around:${radio},${lat},${lng});
+  way["amenity"="fuel"](around:${radio},${lat},${lng});
+);
+out center;`;
+
+        const resp = await fetch("https://overpass-api.de/api/interpreter", {
+            method: "POST",
+            body: "data=" + encodeURIComponent(query),
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            }
+        });
+
+        if (!resp.ok) throw new Error("Overpass error");
+        const data = await resp.json();
+        
+        return (data.elements || []).map(p => {
+            const lat = p.lat || p.center?.lat;
+            const lon = p.lon || p.center?.lon;
+            
+            if (!lat || !lon) return null;
+            
+            return {
+                lat: lat,
+                lon: lon,
+                tags: p.tags || {},
+                name: p.tags?.name
+            };
+        }).filter(p => p !== null);
+    } catch (e) {
+        console.error("Error OpenStreetMap:", e);
+        return [];
+    }
+}
+
+/* ---------- RENDERIZAR ---------- */
+function render() {
+    if (isRendering) return;
+    isRendering = true;
+
+    markersLayer.clearLayers();
+
+    const showOnlyOpen = onlyOpen.checked;
+    const greyOut = greyClosed.checked;
+
+    allPlaces.forEach(p => {
+        const horarioRaw = p.tags?.opening_hours || "";
+        const horarioInfo = parseOpeningHours(horarioRaw);
+
+        if (showOnlyOpen && horarioInfo.isOpen === false) return;
+
+        let color = "#8e8e93";
+        let defaultName = getDefaultName(p.tags);
+        let extraInfo = "";
+
+        // COLORES (estancos y quioscos PÚRPURA)
+        if (p.tags?.shop === "tobacco") {
+            color = "#8B4789";
+        } else if (p.tags?.amenity === "kiosk" || p.tags?.shop === "kiosk" || p.tags?.shop === "newsagent") {
+            color = "#8B4789";
+            extraInfo = '<div class="extra-info">🎯 Los kioscos venden tabaco y vapers</div>';
+        } else if (p.tags?.shop === "vape" || p.tags?.shop === "e-cigarette") {
+            color = "#5856d6";
+        } else if (p.tags?.shop === "supermarket") {
+            color = "#003366";
+        } else if (p.tags?.amenity === "fuel") {
+            color = "#C8A2C8";
+        } else if (p.tags?.shop === "convenience") {
+            color = "#00CED1";
+        }
+
+        let fillOpacity = 1.0;
+        let outerRing = "";
+
+        if (horarioInfo.isOpen === true) {
+            outerRing = `<circle cx="20" cy="20" r="14" fill="none" stroke="#00FF00" stroke-width="3.5" opacity="1"/>`;
+        } else if (horarioInfo.isOpen === false || horarioInfo.isOpen === null) {
+            if (greyOut) fillOpacity = 0.75;
+        }
+
+        let nombre = p.name || defaultName;
+        
+        let queryParts = [nombre];
+        if (p.tags?.["addr:street"]) queryParts.push(p.tags["addr:street"]);
+        if (p.tags?.["addr:housenumber"]) queryParts.push(p.tags["addr:housenumber"]);
+        if (p.tags?.["addr:city"]) queryParts.push(p.tags["addr:city"]);
+        
+        const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(queryParts.join(" ") + " " + p.lat + "," + p.lon)}`;
+
+        const vende = vendeVapers(p.tags);
+        const vapeText = vende ? '<div class="vape-info">✓ Vende tabaco y vapers</div>' : '';
+
+        if (p.tags?.shop === "supermarket" && horarioInfo.isOpen === null && !extraInfo) {
+            extraInfo = '<div class="extra-info">ℹ️ Horario aprox. 9:00-21:30</div>';
+        }
+
+        const popupContent = `
+            <div class="popup-container">
+                <strong>${nombre}</strong><br>
+                <div class="horario-info">${horarioInfo.text}</div>
+                ${vapeText}
+                ${extraInfo}
+                <a href="${mapsUrl}" target="_blank" class="btn-maps">Abrir en Google Maps →</a>
+                <div class="source-badge">OpenStreetMap</div>
+            </div>`;
+
+        const marker = L.circleMarker([p.lat, p.lon], {
+            radius: 9,
+            fillColor: color,
+            color: "white",
+            weight: 2,
+            opacity: 1,
+            fillOpacity: fillOpacity
+        });
+
+        marker.bindPopup(popupContent);
+
+        const svgIcon = L.divIcon({
+            html: `<svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+                ${outerRing}
+                <circle cx="20" cy="20" r="11" fill="${color}" opacity="${fillOpacity}"/>
+            </svg>`,
+            className: "",
+            iconSize: [40, 40],
+            iconAnchor: [20, 20]
+        });
+
+        marker.setIcon(svgIcon);
+        markersLayer.addLayer(marker);
+    });
+
+    isRendering = false;
+}
+
+// Inicio
+iniciarGeolocalizacion();
+
+});
+</script>
+</body>
+</html>
