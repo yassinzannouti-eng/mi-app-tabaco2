@@ -27,14 +27,12 @@ html, body { height: 100%; margin: 0; font-family: -apple-system, BlinkMacSystem
 .btn-pin { position:absolute; bottom:100px; right:20px; width:55px; height:55px; background:white; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:28px; color:#c00; border:none; cursor:pointer; z-index:1500; box-shadow:0 6px 16px rgba(0,0,0,0.15); }
 .btn-search-area { position:absolute; bottom:30px; right:20px; background:#007aff; color:white; border:none; padding:14px 22px; border-radius:25px; cursor:pointer; z-index:1500; font-weight:700; box-shadow:0 6px 20px rgba(0,122,255,0.3); }
 
-/* Popups */
 .popup-container { text-align:center; min-width:240px; padding:8px; }
 .btn-maps { display:block; background:#007aff; color:white !important; text-align:center; padding:12px; border-radius:12px; text-decoration:none !important; margin-top:12px; font-weight:600; font-size:14px; }
 .horario-info { font-size:12px; color:#636366; display:block; margin-top:8px; line-height:1.4; border-top:1px solid #f2f2f7; padding-top:8px; }
 .vape-info { font-size:13px; font-weight:600; margin-top:6px; color:#34c759; }
 .extra-info { font-size:12px; color:#007aff; margin-top:6px; line-height:1.3; }
 
-/* Fix para evitar parpadeo en los pines */
 .custom-pin { pointer-events: none; }
 .custom-pin svg { pointer-events: auto; }
 </style>
@@ -51,8 +49,8 @@ html, body { height: 100%; margin: 0; font-family: -apple-system, BlinkMacSystem
 
 <div id="panel">
   <h3 style="font-weight:700">Ajustes</h3>
-  <label style="cursor:pointer"><input type="checkbox" id="onlyOpen"> Solo abiertos ahora</label><br><br>
-  <label style="cursor:pointer"><input type="checkbox" id="greyClosed" checked> Atenuar cerrados / desconocidos</label>
+  <label><input type="checkbox" id="onlyOpen"> Solo abiertos ahora</label><br><br>
+  <label><input type="checkbox" id="greyClosed" checked> Atenuar cerrados</label>
 </div>
 
 <div class="search-bar">
@@ -78,263 +76,121 @@ const retryBtn = document.getElementById("retryBtn");
 const onlyOpen = document.getElementById("onlyOpen");
 const greyClosed = document.getElementById("greyClosed");
 
-let map, userLocation, markersLayer, userMarker, elementsData = [];
-let lastCenter = null;
-let lastZoom = null;
-let lastSearchTime = 0;
-let cachedData = null;
-let cachedCenter = null;
-let cachedRadius = 0;
+let map, userLocation, markersLayer, elementsData = [];
 
-// Cargar estado
-onlyOpen.checked = localStorage.getItem('onlyOpen') === 'true';
-greyClosed.checked = localStorage.getItem('greyClosed') !== 'false';
-
-/* ---------- NOMBRE POR DEFECTO ---------- */
-function getDefaultName(tags) {
-    if (tags.shop === "tobacco") return "Estanco";
-    if (tags.shop === "supermarket") return "Supermercado";
-    if (tags.amenity === "fuel") return "Gasolinera";
-    if (tags.shop === "convenience") return "Tienda de conveniencia";
-    if (tags.shop === "vape" || tags.shop === "e-cigarette") return "Tienda de vapers";
-    if (tags.amenity === "kiosk" || tags.shop === "kiosk") return "Kiosco";
-    return "Local";
-}
-
-/* ---------- TRADUCTOR DE HORARIOS ---------- */
-function traducirHorario(txt) {
-    if (!txt) return "Horario desconocido";
-    return txt
-        .replace(/Mo/g, "Lun").replace(/Tu/g, "Mar").replace(/We/g, "Mié")
-        .replace(/Th/g, "Jue").replace(/Fr/g, "Vie").replace(/Sa/g, "Sáb")
-        .replace(/Su/g, "Dom").replace(/24\/7/g, "Abierto 24h")
-        .replace(/off/g, "Cerrado").replace(/;/g, "<br>");
-}
-
-/* ---------- ESTADO DE HORARIO ---------- */
-function getOpeningStatus(opening_hours_str) {
-    if (!opening_hours_str || opening_hours_str.trim() === '') {
-        return { isOpen: true, known: false };
-    }
+function getOpeningStatus(str) {
+    if (!str || str.trim() === '') return { isOpen: true, known: false };
     try {
-        const oh = new opening_hours(opening_hours_str);
+        const oh = new opening_hours(str);
         return { isOpen: oh.isOpen(new Date()), known: true };
-    } catch (e) {
+    } catch {
         return { isOpen: true, known: false };
     }
-}
-
-/* ---------- ¿Vende vapers? ---------- */
-function vendeVapers(tags) {
-    if (!tags) return false;
-    const shop = tags.shop;
-    const amenity = tags.amenity;
-    return shop === 'vape' || shop === 'e-cigarette' ||
-           shop === 'tobacco' ||
-           shop === 'supermarket' ||
-           shop === 'convenience' ||
-           shop === 'kiosk' ||
-           amenity === 'kiosk' ||
-           amenity === 'fuel';
 }
 
 function iniciarGeolocalizacion() {
     navigator.geolocation.getCurrentPosition(
-        pos => { iniciarMapa(pos.coords.latitude, pos.coords.longitude); },
-        err => {
-            overlayText.innerHTML = "Error: GPS desactivado o denegado.";
+        pos => iniciarMapa(pos.coords.latitude, pos.coords.longitude),
+        () => {
+            overlayText.innerHTML = "GPS desactivado o denegado.";
             retryBtn.style.display = "block";
         },
         { enableHighAccuracy: true, timeout: 12000 }
     );
 }
 
-retryBtn.onclick = () => iniciarGeolocalizacion();
+retryBtn.onclick = iniciarGeolocalizacion;
 
 function iniciarMapa(lat, lon) {
-    userLocation = { lat, lon };
     overlay.style.display = "none";
     document.getElementById("map").style.display = "block";
 
-    map = L.map('map', { zoomControl: false }).setView([lat, lon], 16);
+    map = L.map('map').setView([lat, lon], 16);
 
     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         attribution: '© OpenStreetMap'
     }).addTo(map);
 
-    markersLayer = L.markerClusterGroup({
-        maxClusterRadius: 70,
-        spiderfyOnMaxZoom: true,
-        showCoverageOnHover: false,
-        zoomToBoundsOnClick: true
-    }).addTo(map);
+    markersLayer = L.markerClusterGroup().addTo(map);
 
-    userMarker = L.circleMarker([lat, lon], {
+    L.circleMarker([lat, lon], {
         radius: 9, color: "white", fillColor: "#007aff", fillOpacity: 0.9, weight: 3
     }).addTo(map);
 
-    let searchTimeout;
-    map.on('moveend zoomend', () => {
-        const now = Date.now();
-        if (now - lastSearchTime < 8000) return;
-
-        const currentCenter = map.getCenter();
-        const currentZoom = map.getZoom();
-
-        if (cachedData && cachedCenter && currentCenter.distanceTo(cachedCenter) < cachedRadius * 0.7) {
-            return;
-        }
-
-        const movedFar = !lastCenter || currentCenter.distanceTo(lastCenter) > 500 || Math.abs(currentZoom - lastZoom) >= 1;
-
-        if (movedFar) {
-            clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(() => {
-                lastCenter = currentCenter;
-                lastZoom = currentZoom;
-                lastSearchTime = now;
-                buscarDatos(true);
-            }, 3000);
-        }
-    });
-
-    buscarDatos(false);
+    buscarDatos();
 }
 
 function getVisibleRadius() {
     const bounds = map.getBounds();
-    return map.getCenter().distanceTo(bounds.getNorthEast()) * 1.2;
+    return map.getCenter().distanceTo(bounds.getNorthEast());
 }
 
-async function buscarDatos(showOverlay = false) {
-    if (!map) return;
-
+async function buscarDatos() {
     const c = map.getCenter();
     const radio = getVisibleRadius();
 
-    if (showOverlay) {
-        overlay.style.display = 'flex';
-        overlayText.textContent = 'Buscando locales cercanos...';
-    }
+    const resp = await fetch("https://overpass-api.de/api/interpreter", {
+        method: "POST",
+        body: "data=" + encodeURIComponent(`[out:json][timeout:25];
+        (
+          node["shop"="tobacco"](around:${radio},${c.lat},${c.lng});
+          node["shop"="convenience"](around:${radio},${c.lat},${c.lng});
+          node["shop"="vape"](around:${radio},${c.lat},${c.lng});
+          node["shop"="e-cigarette"](around:${radio},${c.lat},${c.lng});
+          node["amenity"="fuel"](around:${radio},${c.lat},${c.lng});
+          node["shop"="supermarket"](around:${radio},${c.lat},${c.lng});
+          node["amenity"="kiosk"](around:${radio},${c.lat},${c.lng});
+          node["shop"="kiosk"](around:${radio},${c.lat},${c.lng});
+        );
+        out;`)
+    });
 
-    try {
-        const resp = await fetch("https://overpass-api.de/api/interpreter", {
-            method: "POST",
-            body: "data=" + encodeURIComponent(`[out:json][timeout:25];
-            (
-              node["shop"="tobacco"](around:${radio},${c.lat},${c.lng});
-              node["shop"="convenience"](around:${radio},${c.lat},${c.lng});
-              node["shop"="vape"](around:${radio},${c.lat},${c.lng});
-              node["shop"="e-cigarette"](around:${radio},${c.lat},${c.lng});
-              node["amenity"="fuel"](around:${radio},${c.lat},${c.lng});
-              node["shop"="supermarket"](around:${radio},${c.lat},${c.lng});
-              node["amenity"="kiosk"](around:${radio},${c.lat},${c.lng});
-              node["shop"="kiosk"](around:${radio},${c.lat},${c.lng});
-            );
-            out;`)
-        });
-
-        if (!resp.ok) throw new Error("Overpass error");
-
-        const data = await resp.json();
-        elementsData = data.elements || [];
-
-        cachedData = elementsData;
-        cachedCenter = c;
-        cachedRadius = radio;
-
-        render();
-    } catch (e) {
-        console.error("Error al buscar:", e);
-        if (showOverlay) {
-            overlayText.textContent = 'Error al cargar datos';
-            setTimeout(() => overlay.style.display = 'none', 2000);
-        }
-    } finally {
-        if (showOverlay) setTimeout(() => overlay.style.display = 'none', 800);
-    }
+    const data = await resp.json();
+    elementsData = data.elements || [];
+    render();
 }
 
 function render() {
     markersLayer.clearLayers();
 
-    const showOnlyOpen = onlyOpen.checked;
-    const greyOut = greyClosed.checked;
-
     elementsData.forEach(p => {
+
         const horarioRaw = p.tags?.opening_hours || "";
         const status = getOpeningStatus(horarioRaw);
-
-        if (showOnlyOpen && status.known && !status.isOpen) return;
+        const isFuel = p.tags?.amenity === "fuel";
 
         let color = "#8e8e93";
-        let defaultName = getDefaultName(p.tags);
-        let extraInfo = "";
+        if (p.tags?.shop === "tobacco") color = "#8B4789";
+        if (isFuel) color = "#C8A2C8";
 
-        // NUEVOS COLORES
-        if (p.tags?.shop === "tobacco") {
-            color = "#8B4789"; // Púrpura/Berenjena
-        } else if (p.tags?.amenity === "kiosk" || p.tags?.shop === "kiosk") {
-            color = "#8B4789"; // Púrpura/Berenjena (igual que estancos)
-            extraInfo = '<div class="extra-info">ℹ️ Los kioscos suelen vender tabaco y vapers</div>';
-        } else if (p.tags?.shop === "supermarket") {
-            color = "#003366"; // Azul Marino
-        } else if (p.tags?.amenity === "fuel") {
-            color = "#C8A2C8"; // Lila
-        } else if (p.tags?.shop === "vape" || p.tags?.shop === "e-cigarette") {
-            color = "#5856d6"; // Mantener morado para tiendas de vapers
-        } else if (p.tags?.shop === "convenience") {
-            color = "#00CED1"; // Cian/Turquesa
-        }
-
-        // SISTEMA DE OPACIDAD Y ANILLO VERDE (AÑADIDO AQUÍ)
-        let fillOpacity = 1.0;
         let ringHTML = "";
+        let fillOpacity = 1;
 
-        if (status.known && status.isOpen) {
-            // Abierto confirmado: anillo verde neón
-            ringHTML = `<circle cx="18" cy="18" r="12" fill="none" stroke="#00FF7F" stroke-width="3" opacity="1"/>`;
-            fillOpacity = 1.0;
-        } else {
-            // Cerrado o desconocido
-            if (greyOut) {
-                fillOpacity = 0.4; // Translúcido
-            } else {
-                fillOpacity = 1.0;
-            }
-            ringHTML = "";
+        if (isFuel || (status.known && status.isOpen)) {
+            ringHTML = `
+            <circle cx="18" cy="18" r="13"
+                fill="none"
+                stroke="#00FF00"
+                stroke-width="4"
+                style="filter: drop-shadow(0 0 6px #00FF00) drop-shadow(0 0 10px #00FF00);"
+            />`;
+        } else if (status.known && !status.isOpen && greyClosed.checked) {
+            fillOpacity = 0.35;
         }
 
-        let nombre = p.tags?.name || defaultName;
+        const nombre = p.tags?.name || "Local";
 
-        let queryParts = [nombre];
-        if (p.tags["addr:street"]) queryParts.push(p.tags["addr:street"]);
-        if (p.tags["addr:housenumber"]) queryParts.push(p.tags["addr:housenumber"]);
-        if (p.tags["addr:city"]) queryParts.push(p.tags["addr:city"]);
-        const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(queryParts.join(" "))}`;
+        const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(nombre)}`;
 
-        const horarioEsp = traducirHorario(horarioRaw);
-        const vende = vendeVapers(p.tags);
-        const vapeText = vende ? '<div class="vape-info">✓ Probablemente vende vapers</div>' : '';
-
-        if (p.tags?.shop === "supermarket" && !status.known && !extraInfo) {
-            let note = 'Horario habitual aprox. 9:00-21:30 (verifica en Google Maps)';
-            const nameLower = nombre.toLowerCase();
-            if (nameLower.includes('día') || nameLower.includes('dia')) note = 'Día: la mayoría abre 9:00-21:30 (verifica en Google Maps)';
-            if (nameLower.includes('maskom')) note = 'Maskom: horarios variables (verifica en Google Maps)';
-            extraInfo = `<div class="extra-info">ℹ️ ${note}</div>`;
-        } else if (!status.known && !extraInfo) {
-            extraInfo = '<div class="extra-info">ℹ️ Horario no disponible – verifica en Google Maps</div>';
-        }
+        const horarioMostrar = horarioRaw ? horarioRaw.replace(/;/g, "<br>") : "Horario no disponible";
 
         const pinIcon = L.divIcon({
             className: "custom-pin",
-            html: `<svg width="36" height="48" viewBox="0 0 36 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+            html: `<svg width="36" height="48" viewBox="0 0 36 48">
                 ${ringHTML}
-                <path d="M18 2C9.716 2 3 8.716 3 17c0 10.5 15 27 15 27s15-16.5 15-27c0-8.284-6.716-15-15-15z" 
-                      fill="${color}" 
-                      fill-opacity="${fillOpacity}"/>
-                <circle cx="18" cy="17" r="7" fill="white" opacity="0.95"/>
+                <path d="M18 2C9.7 2 3 8.7 3 17c0 10.5 15 27 15 27s15-16.5 15-27c0-8.3-6.7-15-15-15z"
+                      fill="${color}" fill-opacity="${fillOpacity}"/>
+                <circle cx="18" cy="17" r="7" fill="white"/>
             </svg>`,
             iconSize: [36, 48],
             iconAnchor: [18, 46],
@@ -344,43 +200,14 @@ function render() {
         L.marker([p.lat, p.lon], { icon: pinIcon })
             .bindPopup(`
                 <div class="popup-container">
-                    <strong style="font-size:16px;">${nombre}</strong><br>
-                    <span class="horario-info"><b>Horario:</b><br>${horarioEsp}</span>
-                    ${vapeText}
-                    ${extraInfo}
+                    <strong>${nombre}</strong>
+                    <span class="horario-info"><b>Horario:</b><br>${horarioMostrar}</span>
                     <a href="${mapsUrl}" target="_blank" class="btn-maps">VER EN MAPS</a>
                 </div>
             `)
             .addTo(markersLayer);
     });
 }
-
-// Eventos
-document.getElementById("menuButton").onclick = () => document.getElementById("panel").classList.toggle("active");
-document.getElementById("pinBtn").onclick = () => map.flyTo([userLocation.lat, userLocation.lon], 17);
-document.getElementById("searchAreaBtn").onclick = () => buscarDatos(false);
-document.getElementById("searchBtn").onclick = async () => {
-    const val = document.getElementById("address").value.trim();
-    if (!val) return;
-    try {
-        const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(val)}&limit=1`);
-        const d = await r.json();
-        if (d.length > 0) {
-            map.setView([d[0].lat, d[0].lon], 16);
-            buscarDatos(false);
-        }
-    } catch (e) { console.error(e); }
-};
-
-onlyOpen.addEventListener('change', () => { 
-    localStorage.setItem('onlyOpen', onlyOpen.checked); 
-    render(); 
-});
-
-greyClosed.addEventListener('change', () => { 
-    localStorage.setItem('greyClosed', greyClosed.checked); 
-    render(); 
-});
 
 iniciarGeolocalizacion();
 
