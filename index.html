@@ -15,11 +15,17 @@ html, body { height:100%; margin:0; font-family:-apple-system,BlinkMacSystemFont
 
 #overlay { 
   position:fixed; top:0; left:0; width:100%; height:100%; 
-  background:white; display:flex; flex-direction:column; 
+  background:rgba(255,255,255,0.92); display:flex; flex-direction:column; 
   align-items:center; justify-content:center; z-index:5000; 
-  font-size:18px; gap:20px; text-align:center; padding:20px;
+  font-size:18px; gap:20px; text-align:center; padding:20px; transition:opacity 0.4s;
 }
-#overlay button { padding:12px 28px; border:none; background:#007aff; color:white; border-radius:14px; cursor:pointer; font-weight:600; font-size:17px;}
+#overlay.hidden { opacity:0; pointer-events:none; }
+
+#loadingIndicator {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+  background: rgba(0,0,0,0.65); color: white; padding: 8px 18px; border-radius: 20px;
+  font-size: 14px; z-index: 1000; display: none; pointer-events: none; white-space: nowrap;
+}
 
 .custom-pin { pointer-events:none; }
 .custom-pin svg { pointer-events:auto; }
@@ -27,14 +33,10 @@ html, body { height:100%; margin:0; font-family:-apple-system,BlinkMacSystemFont
 .horario-info { font-size:13px; color:#636366; display:block; margin-top:10px; line-height:1.4; border-top:1px solid #e5e5ea; padding-top:10px;}
 .btn-maps { display:block; background:#007aff; color:white!important; text-align:center; padding:14px; border-radius:12px; text-decoration:none!important; margin-top:14px; font-weight:600; font-size:15px;}
 
-.leaflet-control-locate { 
-  background: white !important; 
-  border-radius: 50% !important; 
-  box-shadow: 0 2px 8px rgba(0,0,0,0.2) !important;
-}
-.leaflet-control-locate a { 
-  width: 36px !important; height: 36px !important; 
-  background-size: 22px !important;
+.leaflet-control a { 
+  background: white !important; border-radius: 50% !important; 
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2) !important; font-size:22px !important;
+  line-height:36px !important; text-align:center !important;
 }
 </style>
 </head>
@@ -43,8 +45,10 @@ html, body { height:100%; margin:0; font-family:-apple-system,BlinkMacSystemFont
 
 <div id="overlay">
   <div id="overlayText">Localizando tu posición y puntos de venta...</div>
-  <button id="retryBtn" style="display:none;">Reintentar</button>
+  <button id="retryBtn" style="display:none; padding:12px 28px; border:none; background:#007aff; color:white; border-radius:14px; cursor:pointer; font-weight:600; font-size:17px;">Reintentar</button>
 </div>
+
+<div id="loadingIndicator">Buscando puntos cercanos...</div>
 
 <div id="map"></div>
 
@@ -53,23 +57,15 @@ html, body { height:100%; margin:0; font-family:-apple-system,BlinkMacSystemFont
 <script src="https://unpkg.com/opening_hours@3.5.0/opening_hours+deps.min.js"></script>
 
 <script>
-// Control de localización personalizado (chincheta)
+// Control de localización (chincheta)
 L.Control.Locate = L.Control.extend({
   onAdd: function(map) {
-    const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control-locate');
+    const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
     const link = L.DomUtil.create('a', '', container);
-    link.href = '#';
-    link.title = 'Centrar en mi posición';
-    link.innerHTML = '📍';
-    link.style.fontSize = '22px';
-    link.style.lineHeight = '36px';
-    link.style.textAlign = 'center';
-    link.style.display = 'block';
-    
-    L.DomEvent.on(link, 'click', L.DomEvent.stopPropagation)
-              .on(link, 'click', L.DomEvent.preventDefault)
+    link.href = '#'; link.title = 'Centrar en mi posición'; link.innerHTML = '📍';
+    link.style.width = '36px'; link.style.height = '36px'; link.style.display = 'block';
+    L.DomEvent.on(link, 'click', L.DomEvent.stop).on(link, 'click', L.DomEvent.preventDefault)
               .on(link, 'click', () => iniciarGeolocalizacion());
-    
     return container;
   }
 });
@@ -79,29 +75,31 @@ document.addEventListener("DOMContentLoaded", () => {
 const overlay = document.getElementById("overlay");
 const overlayText = document.getElementById("overlayText");
 const retryBtn = document.getElementById("retryBtn");
+const loadingInd = document.getElementById("loadingIndicator");
 
-let map, markersLayer, elementsData=[];
+let map, markersLayer, elementsData = [];
+let lastCenterLat = 0, lastCenterLng = 0, lastRadius = 0; // para evitar recargas innecesarias
 
 function getOpeningStatus(str){
-    if(!str || str.trim()==='') return {isOpen:true, known:false};
+    if(!str?.trim()) return {isOpen:true, known:false};
     try{
-        const oh=new opening_hours(str);
+        const oh = new opening_hours(str);
         return {isOpen:oh.isOpen(new Date()), known:true};
-    }catch{
+    }catch(e){
         return {isOpen:true, known:false};
     }
 }
 
 function iniciarGeolocalizacion(){
-    overlay.style.display = "flex";
-    overlayText.innerHTML = "Obteniendo posición...";
-    retryBtn.style.display="none";
+    overlay.classList.remove("hidden");
+    overlayText.innerHTML = "Obteniendo tu posición...";
+    retryBtn.style.display = "none";
 
     navigator.geolocation.getCurrentPosition(
         pos => iniciarMapa(pos.coords.latitude, pos.coords.longitude),
         err => {
-            overlayText.innerHTML = "No se pudo acceder al GPS.<br>Actívalo o permite la ubicación.";
-            retryBtn.style.display="block";
+            overlayText.innerHTML = "No se pudo obtener la ubicación.<br>Activa el GPS o permite el acceso.";
+            retryBtn.style.display = "block";
         },
         {enableHighAccuracy:true, timeout:15000, maximumAge:0}
     );
@@ -109,117 +107,130 @@ function iniciarGeolocalizacion(){
 
 retryBtn.onclick = iniciarGeolocalizacion;
 
-function iniciarMapa(lat,lon){
-
-    overlay.style.display="none";
-    document.getElementById("map").style.display="block";
+function iniciarMapa(lat, lon){
+    overlay.classList.add("hidden");
+    document.getElementById("map").style.display = "block";
 
     map = L.map('map', {
         zoomControl: true
-    }).setView([lat,lon],16);
+    }).setView([lat, lon], 15);
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{
-        attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
     }).addTo(map);
 
-    // Botón de localización (chincheta)
     new L.Control.Locate({ position: 'bottomright' }).addTo(map);
 
     markersLayer = L.markerClusterGroup({
-        maxClusterRadius: 40
+        maxClusterRadius: 45,
+        disableClusteringAtZoom: 17
     }).addTo(map);
 
-    // Chincheta azul del usuario
-    L.circleMarker([lat,lon],{
-        radius:11, color:"white", fillColor:"#007aff", fillOpacity:0.9, weight:4
+    L.circleMarker([lat, lon], {
+        radius: 11, color: "white", fillColor: "#007aff", fillOpacity: 0.9, weight: 4
     }).addTo(map);
 
     buscarDatos();
 
-    // Actualizar al mover/zoom
-    map.on('moveend', buscarDatos);
+    map.on('moveend zoomend', () => {
+        const c = map.getCenter();
+        const r = getVisibleRadius();
+        // Solo recargar si se movió/zoomeó lo suficiente
+        if (Math.abs(c.lat - lastCenterLat) > 0.003 || Math.abs(c.lng - lastCenterLng) > 0.003 || Math.abs(r - lastRadius) > 300) {
+            buscarDatos();
+        }
+    });
 }
 
 function getVisibleRadius(){
     const bounds = map.getBounds();
-    return map.getCenter().distanceTo(bounds.getNorthEast()) * 1.2; // un poco más amplio
+    return map.getCenter().distanceTo(bounds.getNorthEast()) * 1.15; // margen extra
 }
 
 async function buscarDatos(){
-
     if (!map) return;
 
     const c = map.getCenter();
     const radio = getVisibleRadius();
 
-    overlayText.innerHTML = "Buscando estancos, quioscos y vaper shops...";
-    overlay.style.display = "flex";
+    lastCenterLat = c.lat;
+    lastCenterLng = c.lng;
+    lastRadius = radio;
+
+    loadingInd.style.display = "block";
 
     try {
-        const resp = await fetch("https://overpass-api.de/api/interpreter",{
-            method:"POST",
-            body: "data=" + encodeURIComponent(`[out:json][timeout:30];
-            (
-              node["shop"="tobacco"](around:${radio},${c.lat},${c.lng});
-              node["shop"="kiosk"](around:${radio},${c.lat},${c.lng});
-              node["amenity"="kiosk"](around:${radio},${c.lat},${c.lng});
-              node["amenity"="fuel"](around:${radio},${c.lat},${c.lng});
-              node["shop"="vape"](around:${radio},${c.lat},${c.lng});
-              node["shop"="e-cigarette"](around:${radio},${c.lat},${c.lng});
-              node["tobacco"="yes"](around:${radio},${c.lat},${c.lng});  // quioscos y otros que venden tabaco
-            );
-            out;`)
+        const query = `[out:json][timeout:25];
+        (
+          node["shop"="tobacco"](around:${radio},${c.lat},${c.lng});
+          node["shop"="kiosk"](around:${radio},${c.lat},${c.lng});
+          node["amenity"="kiosk"](around:${radio},${c.lat},${c.lng});
+          node["amenity"="fuel"](around:${radio},${c.lat},${c.lng});
+          node["shop"="convenience"](around:${radio},${c.lat},${c.lng});
+          node["shop"="supermarket"](around:${radio},${c.lat},${c.lng});
+          node["shop"="vape"](around:${radio},${c.lat},${c.lng});
+          node["shop"="e-cigarette"](around:${radio},${c.lat},${c.lng});
+          node["tobacco"="yes"](around:${radio},${c.lat},${c.lng});
+          node["vending"="cigarettes"](around:${radio},${c.lat},${c.lng});
+        );
+        - node["shop"="butcher"];
+        - node["shop"="seafood"];
+        - node["shop"="greengrocer"];
+        - node["shop"="fish"];
+        - node["shop"="beverages"](if:!t["tobacco"]);
+        out;`;
+
+        const resp = await fetch("https://overpass-api.de/api/interpreter", {
+            method: "POST",
+            body: "data=" + encodeURIComponent(query)
         });
+
+        if (!resp.ok) throw new Error("Error en Overpass");
 
         const data = await resp.json();
         elementsData = data.elements || [];
         render();
-    } catch(e) {
-        overlayText.innerHTML = "Error al conectar con OpenStreetMap.<br>Reintenta más tarde.";
-        retryBtn.style.display="block";
+    } catch (e) {
+        console.error(e);
+        loadingInd.style.display = "none";
+        overlayText.innerHTML = "Error al cargar los datos.<br>Reintenta o revisa tu conexión.";
+        overlay.classList.remove("hidden");
+        retryBtn.style.display = "block";
     } finally {
-        setTimeout(() => overlay.style.display="none", 800);
+        setTimeout(() => loadingInd.style.display = "none", 600);
     }
 }
 
 function render(){
-
     markersLayer.clearLayers();
 
-    elementsData.forEach(p=>{
-
+    elementsData.forEach(p => {
         const tags = p.tags || {};
         const horarioRaw = tags.opening_hours || "";
         const status = getOpeningStatus(horarioRaw);
 
-        let color = "#8e8e93"; // gris por defecto
+        let color = "#8e8e93";
 
-        if (tags.shop === "tobacco")          color = "#6e2570";   // morado estanco
+        if (tags.shop === "tobacco") color = "#6e2570";
         else if (tags.shop === "kiosk" || tags.amenity === "kiosk") color = "#9c27b0";
-        else if (tags.amenity === "fuel")     color = "#9c27b0";
-        else if (tags.shop === "vape" || tags.shop === "e-cigarette") color = "#2196f3";
-        else if (tags.tobacco === "yes")      color = "#757575";   // gris oscuro para secundarios
-
-        const isFuel = tags.amenity === "fuel";
+        else if (tags.amenity === "fuel") color = "#d81b60";
+        else if (tags.shop === "convenience") color = "#00acc1";
+        else if (tags.shop === "supermarket") color = "#01579b";
+        else if (tags.shop === "vape" || tags.shop === "e-cigarette") color = "#0288d1";
+        else if (tags.tobacco === "yes" || tags.vending === "cigarettes") color = "#757575";
 
         let ringHTML = "";
-        if (isFuel || (status.known && status.isOpen)) {
+        if (status.known && status.isOpen) {
             ringHTML = `
-            <circle cx="20" cy="20" r="15"
-                fill="none" stroke="#34c759" stroke-width="5"
-                style="filter: drop-shadow(0 0 6px #34c759);"/>
-            <circle cx="20" cy="20" r="15"
-                fill="none" stroke="#34c759" stroke-width="5"
-                style="filter: drop-shadow(0 0 10px #34c759); opacity:0.6;"/>`;
+            <circle cx="20" cy="20" r="15" fill="none" stroke="#34c759" stroke-width="5" style="filter: drop-shadow(0 0 6px #34c759);"/>
+            <circle cx="20" cy="20" r="15" fill="none" stroke="#34c759" stroke-width="5" style="filter: drop-shadow(0 0 10px #34c759); opacity:0.5;"/>`;
         }
 
         const nombre = tags.name || tags.brand || "Punto de venta";
+        const horarioMostrar = horarioRaw ? horarioRaw.replace(/;/g, "<br>").replace(/, */g, ", ") : "Horario no disponible";
 
-        const horarioMostrar = horarioRaw 
-            ? horarioRaw.replace(/;/g,"<br>").replace(/, */g,", ")
-            : "Horario no disponible";
-
-        const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(nombre + ", " + (tags["addr:street"]||""))}`;
+        const addr = [tags["addr:street"], tags["addr:housenumber"]].filter(Boolean).join(" ");
+        const mapsQuery = encodeURIComponent(nombre + (addr ? ", " + addr : ""));
 
         const pinIcon = L.divIcon({
             className: "custom-pin",
@@ -229,24 +240,23 @@ function render(){
                       fill="${color}" fill-opacity="0.95"/>
                 <circle cx="20" cy="20" r="8" fill="white"/>
             </svg>`,
-            iconSize: [40,52],
-            iconAnchor: [20,50],
-            popupAnchor: [0,-46]
+            iconSize: [40, 52],
+            iconAnchor: [20, 50],
+            popupAnchor: [0, -46]
         });
 
         L.marker([p.lat, p.lon], {icon: pinIcon})
-        .bindPopup(`
+          .bindPopup(`
             <div style="min-width:220px;">
                 <strong>${nombre}</strong><br>
                 <span class="horario-info">
                     <b>Horario:</b><br>${horarioMostrar}
-                    ${status.known ? `<br><b>Estado:</b> ${status.isOpen ? "🟢 Abierto" : "🔴 Cerrado"}` : ""}
+                    ${status.known ? `<br><b>Estado:</b> ${status.isOpen ? "🟢 Abierto ahora" : "🔴 Cerrado"}` : ""}
                 </span>
-                <a href="${mapsUrl}" target="_blank" class="btn-maps">Abrir en Google Maps</a>
+                <a href="https://www.google.com/maps/search/?api=1&query=${mapsQuery}" target="_blank" class="btn-maps">Abrir en Google Maps</a>
             </div>
-        `)
-        .addTo(markersLayer);
-
+          `)
+          .addTo(markersLayer);
     });
 }
 
